@@ -1,9 +1,38 @@
 from __future__ import annotations
 
+from gomoku.core.enums import Player
 from gomoku.core.game import GomokuGame
 
 
-def game_to_response(game: GomokuGame) -> dict:
-    """Return a JSON-friendly representation for future web APIs."""
+def player_name(player: Player | int | None) -> str | None:
+    if player is None:
+        return None
 
-    return game.get_state()
+    player_value = Player(player)
+    if player_value == Player.BLACK:
+        return "Black"
+    if player_value == Player.WHITE:
+        return "White"
+    return None
+
+
+def serialize_game_state(game: GomokuGame) -> dict:
+    """Return a JSON-friendly game state for the web API."""
+
+    state = game.get_state()
+    return {
+        "board": state["board"],
+        "size": state["size"],
+        "current_player": state["current_player"],
+        "current_player_name": player_name(game.current_player),
+        "winner": state["winner"],
+        "winner_name": player_name(game.winner),
+        "game_over": state["game_over"],
+        "move_count": len(game.move_history),
+    }
+
+
+def game_to_response(game: GomokuGame) -> dict:
+    """Backward-compatible alias for older web API code."""
+
+    return serialize_game_state(game)
