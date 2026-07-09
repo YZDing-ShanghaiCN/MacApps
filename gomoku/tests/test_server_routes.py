@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+import sys
+from typing import Any
+
+
+SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC_DIR))
+
+from gomoku.server import routes
+from gomoku.server.app import app
+
+
+def request(method: str, path: str, json_body: dict | None = None) -> dict[str, Any]:
+    body = json.dumps(json_body).encode("utf-8") if json_body is not None else b""
+    headers = [(b"host", b"testserver")]
+    if json_body is not None:
+        headers.append((b"content-type", b"application/json"))
+
+    messages: list[dict[str, Any]] = []
+    request_sent = False
+
+    async def receive() -> dict[str, Any]:
+        nonlocal request_sent
+        if request_sent:
+            return {"type": "http.disconnect"}
+        request_sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        messages.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode("ascii"),
+        "query_string": b"",
+        "headers": headers,
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+
+    asyncio.run(app(scope, receive, send))
+
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    response_body = b"".join(
+        message.get("body", b"")
+        for message in messages
+        if message["type"] == "http.response.body"
+    )
+    return {
+        "status": start["status"],
+        "body": json.loads(response_body.decode("utf-8")) if response_body else None,
+    }
+
+
+def setup_function() -> None:
+    routes.game.reset()
+
+
+def test_health_returns_ok() -> None:
+    response = request("GET", "/health")
+
+    assert response["status"] == 200
+    assert response["body"] == {"status": "ok"}
+
+
+def test_state_contains_web_fields() -> None:
+    response = request("GET", "/api/state")
+
+    assert response["status"] == 200
+    assert {
+        "board",
+        "current_player",
+        "winner",
+        "game_over",
+        "move_count",
+        "current_player_name",
+        "winner_name",
+        "last_move",
+    }.issubset(response["body"])
+
+
+def test_move_returns_updated_state() -> None:
+    response = request("POST", "/api/move", {"row": 7, "col": 7})
+
+    assert response["status"] == 200
+    assert response["body"]["move_count"] == 1
+    assert response["body"]["last_move"] == {"row": 7, "col": 7, "player": 1}
+
+
+def test_undo_returns_empty_state() -> None:
+    request("POST", "/api/move", {"row": 7, "col": 7})
+
+    response = request("POST", "/api/undo")
+
+    assert response["status"] == 200
+    assert response["body"]["move_count"] == 0
+    assert response["body"]["last_move"] is None
+
+
+def test_reset_returns_initial_state() -> None:
+    request("POST", "/api/move", {"row": 7, "col": 7})
+
+    response = request("POST", "/api/reset")
+
+    assert response["status"] == 200
+    assert response["body"]["move_count"] == 0
+    assert response["body"]["game_over"] is False
+
+
+def test_invalid_move_returns_error() -> None:
+    response = request("POST", "/api/move", {"row": 99, "col": 99})
+
+    assert response["status"] == 400
+    assert "error" in response["body"]

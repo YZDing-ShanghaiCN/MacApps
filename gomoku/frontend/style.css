@@ -8,7 +8,7 @@
   --muted: #66615a;
   --accent: #2f6f67;
   --danger: #a23a32;
-  --cell-size: min(42px, calc((100vw - 48px) / 15));
+  --cell-size: min(42px, calc((100vw - 56px) / 15));
 }
 
 * {
@@ -85,8 +85,8 @@ h1 {
 }
 
 .board {
-  width: calc(var(--cell-size) * 15);
-  height: calc(var(--cell-size) * 15);
+  width: calc(var(--cell-size) * 15 + 4px);
+  height: calc(var(--cell-size) * 15 + 4px);
   display: grid;
   grid-template-columns: repeat(15, var(--cell-size));
   grid-template-rows: repeat(15, var(--cell-size));
@@ -120,6 +120,12 @@ h1 {
   background: rgb(255 255 255 / 18%);
 }
 
+.cell.last-move .stone {
+  box-shadow:
+    0 0 0 3px #b73f34,
+    0 2px 5px rgb(0 0 0 / 25%);
+}
+
 .stone {
   width: 72%;
   aspect-ratio: 1;
@@ -138,16 +144,26 @@ h1 {
 
 @media (max-width: 560px) {
   .app-shell {
-    padding: 16px;
+    padding: 14px;
     place-items: start center;
+  }
+
+  h1 {
+    font-size: 28px;
   }
 
   .top-bar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 12px;
   }
 
   .actions {
     justify-content: flex-start;
+    width: 100%;
+  }
+
+  .actions button {
+    flex: 1 1 120px;
   }
 }

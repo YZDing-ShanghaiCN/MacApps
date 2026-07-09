@@ -16,6 +16,18 @@ def player_name(player: Player | int | None) -> str | None:
     return None
 
 
+def serialize_last_move(game: GomokuGame) -> dict | None:
+    if not game.move_history:
+        return None
+
+    row, col, player = game.move_history[-1]
+    return {
+        "row": row,
+        "col": col,
+        "player": int(player),
+    }
+
+
 def serialize_game_state(game: GomokuGame) -> dict:
     """Return a JSON-friendly game state for the web API."""
 
@@ -29,6 +41,7 @@ def serialize_game_state(game: GomokuGame) -> dict:
         "winner_name": player_name(game.winner),
         "game_over": state["game_over"],
         "move_count": len(game.move_history),
+        "last_move": serialize_last_move(game),
     }
 
 

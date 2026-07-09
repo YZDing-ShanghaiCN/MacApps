@@ -27,18 +27,50 @@ function setMessage(text) {
   messageElement.textContent = text || "";
 }
 
+function playerLabel(playerName) {
+  if (playerName === "Black") {
+    return "黑棋";
+  }
+
+  if (playerName === "White") {
+    return "白棋";
+  }
+
+  return "";
+}
+
+function friendlyErrorMessage(message) {
+  if (message.includes("already occupied")) {
+    return "这个位置已经有棋子了";
+  }
+
+  if (message.includes("outside the board")) {
+    return "落子位置不在棋盘内";
+  }
+
+  if (message.includes("game is over")) {
+    return "游戏已经结束，请重新开始";
+  }
+
+  if (message.includes("row and col")) {
+    return "落子位置无效";
+  }
+
+  return message || "操作失败，请重试";
+}
+
 function updateStatus(state) {
   if (state.winner_name) {
-    statusElement.textContent = `${state.winner_name} wins`;
+    statusElement.textContent = `${playerLabel(state.winner_name)}胜`;
     return;
   }
 
   if (state.game_over) {
-    statusElement.textContent = "Draw";
+    statusElement.textContent = "平局";
     return;
   }
 
-  statusElement.textContent = `Turn: ${state.current_player_name}`;
+  statusElement.textContent = `当前：${playerLabel(state.current_player_name)}`;
 }
 
 function renderBoard(state) {
@@ -46,9 +78,13 @@ function renderBoard(state) {
 
   state.board.forEach((row, rowIndex) => {
     row.forEach((cell, colIndex) => {
+      const isLastMove =
+        state.last_move &&
+        state.last_move.row === rowIndex &&
+        state.last_move.col === colIndex;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "cell";
+      button.className = isLastMove ? "cell last-move" : "cell";
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
       button.disabled = state.game_over || cell !== 0;
@@ -77,7 +113,7 @@ async function loadState() {
     render(state);
     setMessage("");
   } catch (error) {
-    setMessage(error.message);
+    setMessage(friendlyErrorMessage(error.message));
   }
 }
 
@@ -90,7 +126,7 @@ async function playMove(row, col) {
     render(state);
     setMessage("");
   } catch (error) {
-    setMessage(error.message);
+    setMessage(friendlyErrorMessage(error.message));
   }
 }
 
@@ -113,7 +149,7 @@ resetButton.addEventListener("click", async () => {
     render(state);
     setMessage("");
   } catch (error) {
-    setMessage(error.message);
+    setMessage(friendlyErrorMessage(error.message));
   }
 });
 
@@ -123,7 +159,7 @@ undoButton.addEventListener("click", async () => {
     render(state);
     setMessage("");
   } catch (error) {
-    setMessage(error.message);
+    setMessage(friendlyErrorMessage(error.message));
   }
 });
 

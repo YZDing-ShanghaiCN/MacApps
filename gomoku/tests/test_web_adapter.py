@@ -27,6 +27,7 @@ def test_initial_state_serializes_black_turn() -> None:
     assert state["current_player"] == int(Player.BLACK)
     assert state["current_player_name"] == "Black"
     assert state["game_over"] is False
+    assert state["last_move"] is None
 
 
 def test_move_count_changes_after_move() -> None:
@@ -36,6 +37,7 @@ def test_move_count_changes_after_move() -> None:
     state = serialize_game_state(game)
 
     assert state["move_count"] == 1
+    assert state["last_move"] == {"row": 7, "col": 7, "player": int(Player.BLACK)}
 
 
 def test_win_state_serializes_winner_and_game_over() -> None:
