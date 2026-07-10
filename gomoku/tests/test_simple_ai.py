@@ -53,6 +53,53 @@ def test_simple_ai_random_move_stays_near_last_opponent_move() -> None:
     assert board.is_empty(row, col)
 
 
+def test_simple_ai_uses_fixed_move_in_single_stone_ring() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    ai = SimpleAI(Player.WHITE)
+
+    moves = {
+        ai.choose_move(board, last_opponent_move=(7, 7))
+        for _ in range(5)
+    }
+
+    assert len(moves) == 1
+    move = next(iter(moves))
+    assert move is not None
+    row, col = move
+    assert max(abs(row - 7), abs(col - 7)) == 1
+
+
+def test_simple_ai_attacks_own_three_before_lower_defense() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(5, col, Player.WHITE)
+    for col in range(5, 8):
+        board.place(8, col, Player.BLACK)
+
+    move = SimpleAI(Player.WHITE).choose_move(
+        board,
+        last_opponent_move=(8, 7),
+    )
+
+    assert move in {(5, 4), (5, 8)}
+
+
+def test_simple_ai_blocks_immediate_loss_before_attacking_three() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(5, col, Player.WHITE)
+    for col in range(5, 9):
+        board.place(8, col, Player.BLACK)
+
+    move = SimpleAI(Player.WHITE).choose_move(
+        board,
+        last_opponent_move=(8, 8),
+    )
+
+    assert move in {(8, 4), (8, 9)}
+
+
 def test_simple_ai_handles_invalid_last_opponent_move() -> None:
     board = Board()
     board.place(7, 7, Player.BLACK)

@@ -7,13 +7,21 @@ from gomoku.core.enums import Player
 from gomoku.core.rules import get_valid_moves
 
 
-SEARCH_RADIUS = 4
-BLOCK_PRIORITIES = (4, 3, 2)
 DIRECTIONS = (
     (0, 1),
     (1, 0),
     (1, 1),
     (1, -1),
+)
+RING_OFFSETS = (
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, -1),
+    (0, 1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
 )
 
 
@@ -28,7 +36,11 @@ class RandomAI:
 
 
 class SimpleAI:
-    """Basic defensive AI that blocks nearby opponent lines."""
+    """Deterministic rule-based AI.
+
+    The AI follows a fixed first-match decision table. It does not use a
+    value function, learning, random choices, or multi-move search.
+    """
 
     def __init__(self, player: Player | int = Player.WHITE) -> None:
         self.player = Player(player)
@@ -46,26 +58,42 @@ class SimpleAI:
         try:
             ai_player = self.player if player is None else Player(player)
         except ValueError:
-            return random.choice(valid_moves)
+            return valid_moves[0]
 
         opponent = ai_player.opponent
         if opponent == Player.EMPTY:
-            return random.choice(valid_moves)
+            return valid_moves[0]
 
-        if not self._is_valid_opponent_move(board, opponent, last_opponent_move):
-            return random.choice(valid_moves)
+        # The order below is the complete fixed policy. A later rule never
+        # overrides an earlier matching rule.
+        move = self._find_completion_move(board, ai_player, 5)
+        if move is not None:
+            return move
 
-        row, col = last_opponent_move
-        scoped_moves = self._valid_moves_near(board, row, col)
-        if not scoped_moves:
-            return random.choice(valid_moves)
+        move = self._find_completion_move(board, opponent, 5)
+        if move is not None:
+            return move
 
-        for priority in BLOCK_PRIORITIES:
-            blockers = self._blockers_for_priority(board, row, col, opponent, priority)
-            if blockers:
-                return random.choice(blockers)
+        move = self._find_completion_move(board, ai_player, 4)
+        if move is not None:
+            return move
 
-        return random.choice(scoped_moves)
+        move = self._find_completion_move(board, opponent, 4)
+        if move is not None:
+            return move
+
+        if self._is_valid_opponent_move(board, opponent, last_opponent_move):
+            row, col = last_opponent_move
+            if self._is_isolated_move(board, row, col, opponent):
+                move = self._move_in_ring(board, row, col)
+                if move is not None:
+                    return move
+
+        move = self._find_completion_move(board, opponent, 3)
+        if move is not None:
+            return move
+
+        return self._fixed_fallback_move(board, valid_moves)
 
     def _is_valid_opponent_move(
         self,
@@ -86,92 +114,99 @@ class SimpleAI:
 
         return board.is_inside(row, col) and board.grid[row][col] == int(opponent)
 
-    def _valid_moves_near(self, board: Board, row: int, col: int) -> list[tuple[int, int]]:
-        row_start = max(0, row - SEARCH_RADIUS)
-        row_end = min(board.size - 1, row + SEARCH_RADIUS)
-        col_start = max(0, col - SEARCH_RADIUS)
-        col_end = min(board.size - 1, col + SEARCH_RADIUS)
+    def _find_completion_move(
+        self,
+        board: Board,
+        player: Player,
+        line_length: int,
+    ) -> tuple[int, int] | None:
+        """Find the first direct line completion in fixed scan order."""
+
+        if line_length <= 1:
+            return None
+
+        for dr, dc in DIRECTIONS:
+            for row in range(board.size):
+                for col in range(board.size):
+                    cells = self._window_cells(board, row, col, dr, dc, line_length)
+                    if cells is None:
+                        continue
+
+                    values = [board.grid[current_row][current_col] for current_row, current_col in cells]
+                    if values.count(int(player)) != line_length - 1:
+                        continue
+                    if values.count(int(Player.EMPTY)) != 1:
+                        continue
+
+                    return cells[values.index(int(Player.EMPTY))]
+
+        return None
+
+    def _window_cells(
+        self,
+        board: Board,
+        row: int,
+        col: int,
+        dr: int,
+        dc: int,
+        length: int,
+    ) -> list[tuple[int, int]] | None:
+        end_row = row + (length - 1) * dr
+        end_col = col + (length - 1) * dc
+        if not board.is_inside(end_row, end_col):
+            return None
 
         return [
-            (current_row, current_col)
-            for current_row in range(row_start, row_end + 1)
-            for current_col in range(col_start, col_end + 1)
-            if board.is_empty(current_row, current_col)
+            (row + offset * dr, col + offset * dc)
+            for offset in range(length)
         ]
 
-    def _blockers_for_priority(
+    def _is_isolated_move(
         self,
         board: Board,
         row: int,
         col: int,
-        opponent: Player,
-        priority: int,
-    ) -> list[tuple[int, int]]:
-        blockers: list[tuple[int, int]] = []
+        player: Player,
+    ) -> bool:
         for dr, dc in DIRECTIONS:
-            total, ends = self._line_info(board, row, col, dr, dc, opponent)
-            if total >= priority:
-                blockers.extend(ends)
+            for sign in (-1, 1):
+                neighbor_row = row + sign * dr
+                neighbor_col = col + sign * dc
+                if (
+                    board.is_inside(neighbor_row, neighbor_col)
+                    and board.grid[neighbor_row][neighbor_col] == int(player)
+                ):
+                    return False
 
-        return list(dict.fromkeys(blockers))
+        return True
 
-    def _line_info(
+    def _move_in_ring(
         self,
         board: Board,
         row: int,
         col: int,
-        dr: int,
-        dc: int,
-        opponent: Player,
-    ) -> tuple[int, list[tuple[int, int]]]:
-        backward_count, backward_end = self._scan_direction(
-            board,
-            row,
-            col,
-            -dr,
-            -dc,
-            opponent,
-        )
-        forward_count, forward_end = self._scan_direction(
-            board,
-            row,
-            col,
-            dr,
-            dc,
-            opponent,
-        )
+    ) -> tuple[int, int] | None:
+        for row_offset, col_offset in RING_OFFSETS:
+            candidate = (row + row_offset, col + col_offset)
+            if board.is_empty(*candidate):
+                return candidate
 
-        ends = [
-            move
-            for move in (backward_end, forward_end)
-            if move is not None
-            and abs(move[0] - row) <= SEARCH_RADIUS
-            and abs(move[1] - col) <= SEARCH_RADIUS
-        ]
-        return 1 + backward_count + forward_count, ends
+        return None
 
-    def _scan_direction(
+    def _fixed_fallback_move(
         self,
         board: Board,
-        row: int,
-        col: int,
-        dr: int,
-        dc: int,
-        opponent: Player,
-    ) -> tuple[int, tuple[int, int] | None]:
-        count = 0
-        current_row = row + dr
-        current_col = col + dc
+        valid_moves: list[tuple[int, int]],
+    ) -> tuple[int, int]:
+        """Use a fixed center-out coordinate order without scoring."""
 
-        while (
-            board.is_inside(current_row, current_col)
-            and board.grid[current_row][current_col] == int(opponent)
-        ):
-            count += 1
-            current_row += dr
-            current_col += dc
+        center = board.size // 2
+        for distance in range(board.size):
+            for row in range(board.size):
+                for col in range(board.size):
+                    if max(abs(row - center), abs(col - center)) != distance:
+                        continue
+                    if board.is_empty(row, col):
+                        return row, col
 
-        if board.is_empty(current_row, current_col):
-            return count, (current_row, current_col)
-
-        return count, None
+        return valid_moves[0]
