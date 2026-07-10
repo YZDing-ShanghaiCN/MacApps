@@ -10,6 +10,7 @@ from typing import Any
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
+from gomoku import config
 from gomoku.server import routes
 from gomoku.server.app import app
 
@@ -62,6 +63,7 @@ def request(method: str, path: str, json_body: dict | None = None) -> dict[str, 
 
 
 def setup_function() -> None:
+    routes.set_current_mode(config.MODE_LOCAL_2P)
     routes.game.reset()
 
 
@@ -85,7 +87,11 @@ def test_state_contains_web_fields() -> None:
         "current_player_name",
         "winner_name",
         "last_move",
+        "mode",
+        "ai_player",
     }.issubset(response["body"])
+    assert response["body"]["mode"] == config.MODE_LOCAL_2P
+    assert response["body"]["ai_player"] is None
 
 
 def test_move_returns_updated_state() -> None:
@@ -114,10 +120,40 @@ def test_reset_returns_initial_state() -> None:
     assert response["status"] == 200
     assert response["body"]["move_count"] == 0
     assert response["body"]["game_over"] is False
+    assert response["body"]["mode"] == config.MODE_LOCAL_2P
+
+
+def test_reset_can_change_mode() -> None:
+    request("POST", "/api/move", {"row": 7, "col": 7})
+
+    response = request("POST", "/api/reset", {"mode": config.MODE_VS_AI})
+
+    assert response["status"] == 200
+    assert response["body"]["move_count"] == 0
+    assert response["body"]["mode"] == config.MODE_VS_AI
+    assert response["body"]["ai_player"] == 2
+
+
+def test_mode_endpoint_switches_mode_and_resets_game() -> None:
+    request("POST", "/api/move", {"row": 7, "col": 7})
+
+    response = request("POST", "/api/mode", {"mode": config.MODE_VS_AI})
+
+    assert response["status"] == 200
+    assert response["body"]["move_count"] == 0
+    assert response["body"]["mode"] == config.MODE_VS_AI
+    assert response["body"]["ai_player"] == 2
 
 
 def test_invalid_move_returns_error() -> None:
     response = request("POST", "/api/move", {"row": 99, "col": 99})
+
+    assert response["status"] == 400
+    assert "error" in response["body"]
+
+
+def test_invalid_mode_returns_error() -> None:
+    response = request("POST", "/api/mode", {"mode": "bad_mode"})
 
     assert response["status"] == 400
     assert "error" in response["body"]

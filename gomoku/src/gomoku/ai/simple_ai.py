@@ -30,18 +30,21 @@ class RandomAI:
 class SimpleAI:
     """Basic defensive AI that blocks nearby opponent lines."""
 
+    def __init__(self, player: Player | int = Player.WHITE) -> None:
+        self.player = Player(player)
+
     def choose_move(
         self,
         board: Board,
-        player: Player | int,
-        last_opponent_move: tuple[int, int] | None,
+        player: Player | int | None = None,
+        last_opponent_move: tuple[int, int] | None = None,
     ) -> tuple[int, int] | None:
         valid_moves = get_valid_moves(board)
         if not valid_moves:
             return None
 
         try:
-            ai_player = Player(player)
+            ai_player = self.player if player is None else Player(player)
         except ValueError:
             return random.choice(valid_moves)
 

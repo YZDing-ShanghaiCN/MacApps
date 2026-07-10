@@ -52,6 +52,7 @@ h1 {
   line-height: 1.1;
 }
 
+.mode-status,
 .status,
 .message {
   min-height: 24px;
@@ -59,11 +60,24 @@ h1 {
   color: var(--muted);
 }
 
+.mode-status {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .message {
   margin-top: 12px;
   color: var(--danger);
 }
 
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.mode-actions,
 .actions {
   display: flex;
   gap: 8px;
@@ -71,6 +85,7 @@ h1 {
   justify-content: flex-end;
 }
 
+.mode-actions button,
 .actions button {
   border: 1px solid #9d8a73;
   border-radius: 6px;
@@ -80,6 +95,13 @@ h1 {
   cursor: pointer;
 }
 
+.mode-actions button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.mode-actions button:hover,
 .actions button:hover {
   border-color: var(--accent);
 }
@@ -158,11 +180,18 @@ h1 {
     gap: 12px;
   }
 
+  .controls {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .mode-actions,
   .actions {
     justify-content: flex-start;
     width: 100%;
   }
 
+  .mode-actions button,
   .actions button {
     flex: 1 1 120px;
   }

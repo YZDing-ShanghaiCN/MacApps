@@ -5,6 +5,7 @@ import sys
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
+from gomoku import config
 from gomoku.adapters.web_adapter import serialize_game_state
 from gomoku.core.enums import Player
 from gomoku.core.game import GomokuGame
@@ -28,6 +29,8 @@ def test_initial_state_serializes_black_turn() -> None:
     assert state["current_player_name"] == "Black"
     assert state["game_over"] is False
     assert state["last_move"] is None
+    assert state["mode"] == config.MODE_LOCAL_2P
+    assert state["ai_player"] is None
 
 
 def test_move_count_changes_after_move() -> None:
@@ -63,3 +66,16 @@ def test_win_state_serializes_winner_and_game_over() -> None:
     assert state["winner"] == int(Player.BLACK)
     assert state["winner_name"] == "Black"
     assert state["move_count"] == 9
+
+
+def test_serialize_game_state_includes_ai_mode_fields() -> None:
+    game = GomokuGame()
+
+    state = serialize_game_state(
+        game,
+        mode=config.MODE_VS_AI,
+        ai_player=Player.WHITE,
+    )
+
+    assert state["mode"] == config.MODE_VS_AI
+    assert state["ai_player"] == int(Player.WHITE)

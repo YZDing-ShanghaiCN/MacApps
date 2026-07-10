@@ -12,11 +12,22 @@
         <div class="top-bar">
           <div>
             <h1>Gomoku</h1>
+            <p id="mode-status" class="mode-status">模式：双人对战</p>
             <p id="status" class="status">Loading...</p>
           </div>
-          <div class="actions">
-            <button id="undo-button" type="button">悔棋</button>
-            <button id="reset-button" type="button">重新开始</button>
+          <div class="controls">
+            <div class="mode-actions" role="group" aria-label="选择对战模式">
+              <button id="mode-local-button" type="button" aria-pressed="true">
+                双人对战
+              </button>
+              <button id="mode-ai-button" type="button" aria-pressed="false">
+                人机对战
+              </button>
+            </div>
+            <div class="actions">
+              <button id="undo-button" type="button">悔棋</button>
+              <button id="reset-button" type="button">重新开始</button>
+            </div>
           </div>
         </div>
 

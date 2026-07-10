@@ -1,9 +1,14 @@
-"""Shared configuration for the first-stage local Gomoku app."""
+"""Shared configuration for the Gomoku app."""
 
 BOARD_SIZE = 15
 CELL_SIZE = 40
 MARGIN = 40
-INFO_HEIGHT = 64
+INFO_HEIGHT = 96
+
+MODE_LOCAL_2P = "local_2p"
+MODE_VS_AI = "vs_ai"
+DEFAULT_MODE = MODE_LOCAL_2P
+VALID_MODES = (MODE_LOCAL_2P, MODE_VS_AI)
 
 WINDOW_WIDTH = MARGIN * 2 + CELL_SIZE * (BOARD_SIZE - 1)
 WINDOW_HEIGHT = WINDOW_WIDTH + INFO_HEIGHT

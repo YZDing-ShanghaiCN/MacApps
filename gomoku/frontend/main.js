@@ -1,18 +1,34 @@
 const boardElement = document.querySelector("#board");
+const modeStatusElement = document.querySelector("#mode-status");
 const statusElement = document.querySelector("#status");
 const messageElement = document.querySelector("#message");
+const modeLocalButton = document.querySelector("#mode-local-button");
+const modeAiButton = document.querySelector("#mode-ai-button");
 const resetButton = document.querySelector("#reset-button");
 const undoButton = document.querySelector("#undo-button");
 
 let currentState = null;
+let requestInFlight = false;
+
+const MODE_LABELS = {
+  local_2p: "双人对战",
+  vs_ai: "人机对战",
+};
 
 async function requestJson(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
     ...options,
+    headers: {
+      ...headers,
+    },
   });
   const data = await response.json();
 
@@ -39,6 +55,10 @@ function playerLabel(playerName) {
   return "";
 }
 
+function modeLabel(mode) {
+  return MODE_LABELS[mode] || "未知模式";
+}
+
 function friendlyErrorMessage(message) {
   if (message.includes("already occupied")) {
     return "这个位置已经有棋子了";
@@ -56,7 +76,18 @@ function friendlyErrorMessage(message) {
     return "落子位置无效";
   }
 
+  if (message.includes("Mode must be")) {
+    return "模式无效";
+  }
+
   return message || "操作失败，请重试";
+}
+
+function updateMode(state) {
+  const mode = state.mode || "local_2p";
+  modeStatusElement.textContent = `模式：${modeLabel(mode)}`;
+  modeLocalButton.setAttribute("aria-pressed", String(mode === "local_2p"));
+  modeAiButton.setAttribute("aria-pressed", String(mode === "vs_ai"));
 }
 
 function updateStatus(state) {
@@ -103,6 +134,7 @@ function renderBoard(state) {
 
 function render(state) {
   currentState = state;
+  updateMode(state);
   updateStatus(state);
   renderBoard(state);
 }
@@ -118,6 +150,11 @@ async function loadState() {
 }
 
 async function playMove(row, col) {
+  if (requestInFlight) {
+    return;
+  }
+
+  requestInFlight = true;
   try {
     const state = await requestJson("/api/move", {
       method: "POST",
@@ -127,6 +164,8 @@ async function playMove(row, col) {
     setMessage("");
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    requestInFlight = false;
   }
 }
 
@@ -136,11 +175,32 @@ boardElement.addEventListener("click", (event) => {
     return;
   }
 
-  if (currentState.game_over || cell.disabled) {
+  if (requestInFlight || currentState.game_over || cell.disabled) {
     return;
   }
 
   playMove(Number(cell.dataset.row), Number(cell.dataset.col));
+});
+
+async function changeMode(mode) {
+  try {
+    const state = await requestJson("/api/mode", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    });
+    render(state);
+    setMessage("");
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  }
+}
+
+modeLocalButton.addEventListener("click", () => {
+  changeMode("local_2p");
+});
+
+modeAiButton.addEventListener("click", () => {
+  changeMode("vs_ai");
 });
 
 resetButton.addEventListener("click", async () => {

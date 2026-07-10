@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from gomoku import config
+from gomoku.ai.simple_ai import SimpleAI
 from gomoku.core.enums import Player
 from gomoku.core.exceptions import GameOverError, InvalidMoveError
 from gomoku.core.game import GomokuGame
@@ -16,6 +17,12 @@ def player_label(player: Player | None) -> str:
     return "None"
 
 
+def mode_label(mode: str) -> str:
+    if mode == config.MODE_VS_AI:
+        return "VS AI"
+    return "Local 2P"
+
+
 class PygameGomokuApp:
     def __init__(self) -> None:
         pygame.init()
@@ -27,6 +34,9 @@ class PygameGomokuApp:
         self.font = pygame.font.SysFont("Arial", 24)
         self.small_font = pygame.font.SysFont("Arial", 18)
         self.game = GomokuGame(config.BOARD_SIZE)
+        self.mode = config.DEFAULT_MODE
+        self.ai_player = Player.WHITE
+        self.ai = SimpleAI(self.ai_player)
         self.message = ""
 
     def run(self) -> None:
@@ -45,26 +55,78 @@ class PygameGomokuApp:
                 return False
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    self.game.reset()
-                    self.message = ""
+                if event.key == pygame.K_1:
+                    self.set_mode(config.MODE_LOCAL_2P)
+                elif event.key == pygame.K_2:
+                    self.set_mode(config.MODE_VS_AI)
+                elif event.key == pygame.K_r:
+                    self.reset_game()
                 elif event.key == pygame.K_u:
-                    if self.game.undo():
-                        self.message = ""
+                    self.undo_move()
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 row_col = self.pixel_to_cell(*event.pos)
                 if row_col is not None:
                     row, col = row_col
-                    try:
-                        self.game.make_move(row, col)
-                        self.message = ""
-                    except InvalidMoveError as exc:
-                        self.message = str(exc)
-                    except GameOverError:
-                        self.message = "Game over"
+                    self.handle_player_move(row, col)
 
         return True
+
+    def set_mode(self, mode: str) -> None:
+        if mode not in config.VALID_MODES:
+            return
+
+        self.mode = mode
+        self.reset_game()
+
+    def reset_game(self) -> None:
+        self.game.reset()
+        self.message = ""
+
+    def undo_move(self) -> None:
+        if self.mode == config.MODE_VS_AI:
+            if self.game.undo() and self.game.current_player == self.ai_player:
+                self.game.undo()
+            self.message = ""
+            return
+
+        if self.game.undo():
+            self.message = ""
+
+    def handle_player_move(self, row: int, col: int) -> None:
+        if self.mode == config.MODE_VS_AI and self.game.current_player == self.ai_player:
+            self.message = "AI turn"
+            return
+
+        try:
+            self.game.make_move(row, col)
+            self.message = ""
+            self.play_ai_move((row, col))
+        except InvalidMoveError as exc:
+            self.message = str(exc)
+        except GameOverError:
+            self.message = "Game over"
+
+    def play_ai_move(self, last_opponent_move: tuple[int, int]) -> None:
+        if self.mode != config.MODE_VS_AI:
+            return
+
+        if self.game.game_over or self.game.current_player != self.ai_player:
+            return
+
+        move = self.ai.choose_move(
+            self.game.board,
+            last_opponent_move=last_opponent_move,
+        )
+        if move is None:
+            return
+
+        try:
+            self.game.make_move(*move)
+        except InvalidMoveError as exc:
+            self.message = str(exc)
+        except GameOverError:
+            self.message = "Game over"
 
     def pixel_to_cell(self, x: int, y: int) -> tuple[int, int] | None:
         col = round((x - config.MARGIN) / config.CELL_SIZE)
@@ -169,6 +231,20 @@ class PygameGomokuApp:
             (0, top, config.WINDOW_WIDTH, config.INFO_HEIGHT),
         )
 
+        mode_surface = self.small_font.render(
+            f"Mode: {mode_label(self.mode)}",
+            True,
+            config.TEXT_COLOR,
+        )
+        self.screen.blit(mode_surface, (config.MARGIN, top + 8))
+
+        controls_surface = self.small_font.render(
+            "1: Local 2P   2: VS AI   R: Restart   U: Undo",
+            True,
+            config.TEXT_COLOR,
+        )
+        self.screen.blit(controls_surface, (config.MARGIN + 170, top + 8))
+
         if self.game.winner is not None:
             status = f"{player_label(self.game.winner)} wins"
             color = config.WIN_COLOR
@@ -180,7 +256,7 @@ class PygameGomokuApp:
             color = config.TEXT_COLOR
 
         status_surface = self.font.render(status, True, color)
-        self.screen.blit(status_surface, (config.MARGIN, top + 18))
+        self.screen.blit(status_surface, (config.MARGIN, top + 32))
 
         if self.message:
             message_surface = self.small_font.render(
@@ -188,7 +264,7 @@ class PygameGomokuApp:
                 True,
                 config.WIN_COLOR,
             )
-            self.screen.blit(message_surface, (config.MARGIN + 180, top + 22))
+            self.screen.blit(message_surface, (config.MARGIN, top + 68))
 
     def cell_center(self, row: int, col: int) -> tuple[int, int]:
         return (
