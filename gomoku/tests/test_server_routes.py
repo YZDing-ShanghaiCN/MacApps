@@ -104,6 +104,16 @@ def test_start_enables_cumulative_timer() -> None:
     assert response["body"]["timer_running"] is True
 
 
+def test_create_private_room_returns_private_owner_and_invite_links() -> None:
+    response = request("POST", "/api/rooms")
+
+    assert response["status"] == 201
+    assert response["body"]["room_id"]
+    assert "/room/" in response["body"]["owner_url"]
+    assert "token=" in response["body"]["owner_url"]
+    assert response["body"]["owner_url"] != response["body"]["invite_url"]
+
+
 def test_move_returns_updated_state() -> None:
     response = request("POST", "/api/move", {"row": 7, "col": 7})
 

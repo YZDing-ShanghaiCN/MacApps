@@ -8,6 +8,7 @@ const modeAiButton = document.querySelector("#mode-ai-button");
 const difficultySimpleButton = document.querySelector("#difficulty-simple-button");
 const difficultyNormalButton = document.querySelector("#difficulty-normal-button");
 const difficultyHardButton = document.querySelector("#difficulty-hard-button");
+const createRoomButton = document.querySelector("#create-room-button");
 const startButton = document.querySelector("#start-button");
 const resetButton = document.querySelector("#reset-button");
 const undoButton = document.querySelector("#undo-button");
@@ -235,6 +236,25 @@ async function startGame() {
   }
 }
 
+async function createPrivateRoom() {
+  if (requestInFlight) {
+    return;
+  }
+
+  requestInFlight = true;
+  try {
+    const room = await requestJson("/api/rooms", { method: "POST" });
+    sessionStorage.setItem(
+      `gomoku.room.${room.room_id}.invite_url`,
+      room.invite_url,
+    );
+    window.location.assign(room.owner_url);
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+    requestInFlight = false;
+  }
+}
+
 boardElement.addEventListener("click", (event) => {
   const cell = event.target.closest(".cell");
   if (!cell || !boardElement.contains(cell) || !currentState) {
@@ -271,6 +291,10 @@ modeAiButton.addEventListener("click", () => {
 
 difficultySimpleButton.addEventListener("click", () => {
   setMessage("当前 AI 难度：简单");
+});
+
+createRoomButton.addEventListener("click", () => {
+  createPrivateRoom();
 });
 
 startButton.addEventListener("click", () => {

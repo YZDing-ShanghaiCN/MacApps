@@ -17,10 +17,12 @@ class GomokuGame:
         self,
         size: int = BOARD_SIZE,
         clock: Callable[[], float] = time.monotonic,
+        starting_player: Player | int = Player.BLACK,
     ) -> None:
         self.board = Board(size)
         self._clock = clock
-        self.current_player = Player.BLACK
+        self.starting_player = self._validate_starting_player(starting_player)
+        self.current_player = self.starting_player
         self.winner: Player | None = None
         self.game_over = False
         self.move_history: list[tuple[int, int, Player]] = []
@@ -84,9 +86,12 @@ class GomokuGame:
             self._turn_started_at = self._clock()
         return True
 
-    def reset(self) -> None:
+    def reset(self, starting_player: Player | int | None = None) -> None:
+        if starting_player is not None:
+            self.starting_player = self._validate_starting_player(starting_player)
+
         self.board.reset()
-        self.current_player = Player.BLACK
+        self.current_player = self.starting_player
         self.winner = None
         self.game_over = False
         self.move_history.clear()
@@ -151,3 +156,9 @@ class GomokuGame:
     def _stop_timer(self) -> None:
         self.timer_running = False
         self._turn_started_at = None
+
+    def _validate_starting_player(self, player: Player | int) -> Player:
+        player_value = Player(player)
+        if player_value == Player.EMPTY:
+            raise ValueError("The starting player must be black or white.")
+        return player_value

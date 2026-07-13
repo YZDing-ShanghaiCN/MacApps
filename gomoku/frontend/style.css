@@ -80,6 +80,7 @@ h1 {
 
 .mode-actions,
 .difficulty-actions,
+.option-actions,
 .actions {
   display: flex;
   gap: 8px;
@@ -89,6 +90,7 @@ h1 {
 
 .mode-actions button,
 .difficulty-actions button,
+.option-actions button,
 .actions button {
   border: 1px solid #9d8a73;
   border-radius: 6px;
@@ -104,19 +106,69 @@ h1 {
   color: #fff;
 }
 
+.option-actions button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .mode-actions button:hover,
 .difficulty-actions button:hover,
+.option-actions button:hover,
 .actions button:hover {
   border-color: var(--accent);
 }
 
 .mode-actions button:disabled,
 .difficulty-actions button:disabled,
+.option-actions button:disabled,
 .actions button:disabled {
   border-color: #c8bdaf;
   background: #ebe5dd;
   color: #908779;
   cursor: not-allowed;
+}
+
+.button-link {
+  border: 1px solid #9d8a73;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.button-link:hover {
+  border-color: var(--accent);
+}
+
+.lobby-panel {
+  width: min(640px, 100%);
+  padding: 20px;
+  border: 1px solid #d2c2ac;
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.lobby-panel h2 {
+  margin: 0 0 12px;
+}
+
+.guest-settings,
+.owner-confirmation {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.setting-label {
+  margin: 4px 0 -2px;
+  font-weight: 700;
+}
+
+.game-actions {
+  margin-top: 14px;
+  justify-content: flex-start;
 }
 
 .board {
@@ -207,6 +259,7 @@ h1 {
 
   .mode-actions,
   .difficulty-actions,
+  .option-actions,
   .actions {
     justify-content: flex-start;
     width: 100%;
@@ -214,6 +267,7 @@ h1 {
 
   .mode-actions button,
   .difficulty-actions button,
+  .option-actions button,
   .actions button {
     flex: 1 1 120px;
   }

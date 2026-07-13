@@ -29,6 +29,15 @@ def test_black_moves_first() -> None:
     assert game.current_player == Player.BLACK
 
 
+def test_game_can_be_configured_for_white_to_move_first() -> None:
+    game = GomokuGame(starting_player=Player.WHITE)
+
+    assert game.current_player == Player.WHITE
+
+    game.reset(starting_player=Player.BLACK)
+    assert game.current_player == Player.BLACK
+
+
 def test_valid_move_switches_player() -> None:
     game = GomokuGame()
 

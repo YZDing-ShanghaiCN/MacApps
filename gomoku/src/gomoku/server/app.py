@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from gomoku.server.rooms import router as room_router
 from gomoku.server.routes import router
 
 app = FastAPI(title="Gomoku API", version="0.1.0")
@@ -13,11 +14,17 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.include_router(router)
+app.include_router(room_router)
 
 
 @app.get("/")
 def read_root() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/room/{room_id}")
+def read_room(room_id: str) -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "room.html")
 
 
 @app.get("/health")

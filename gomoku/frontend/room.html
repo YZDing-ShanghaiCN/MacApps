@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>私人五子棋房间</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="game-panel" aria-label="私人五子棋房间">
+        <div class="top-bar">
+          <div>
+            <h1>私人五子棋</h1>
+            <p id="room-status" class="mode-status">正在连接房间...</p>
+            <p id="status" class="status"></p>
+            <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
+          </div>
+          <div class="actions room-actions">
+            <button id="copy-invite-button" type="button" hidden>复制邀请链接</button>
+            <a class="button-link" href="/">返回本地对局</a>
+          </div>
+        </div>
+
+        <section id="lobby-panel" class="lobby-panel">
+          <h2>等待室</h2>
+          <p id="participant-status" class="status"></p>
+          <p id="configuration-summary" class="status"></p>
+
+          <div id="guest-settings" class="guest-settings" hidden>
+            <p class="setting-label">选择你的棋色</p>
+            <div class="option-actions" role="group" aria-label="选择自己的棋色">
+              <button type="button" data-guest-color="black" aria-pressed="true">我执黑</button>
+              <button type="button" data-guest-color="white" aria-pressed="false">我执白</button>
+            </div>
+
+            <p class="setting-label">选择先手</p>
+            <div class="option-actions" role="group" aria-label="选择先手">
+              <button type="button" data-first-player="black" aria-pressed="true">黑棋先手</button>
+              <button type="button" data-first-player="white" aria-pressed="false">白棋先手</button>
+            </div>
+            <button id="submit-configuration-button" type="button">提交设置</button>
+          </div>
+
+          <div id="owner-confirmation" class="owner-confirmation" hidden>
+            <p class="status">受邀者已提交设置。</p>
+            <button id="accept-configuration-button" type="button">接受并开始对局</button>
+          </div>
+        </section>
+
+        <section id="game-panel" hidden>
+          <div id="board" class="board" aria-label="15 by 15 Gomoku board"></div>
+          <div class="actions game-actions">
+            <button id="undo-button" type="button">请求悔棋</button>
+            <button id="rematch-button" type="button" hidden>请求再来一局</button>
+          </div>
+        </section>
+
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/static/room.js"></script>
+  </body>
+</html>

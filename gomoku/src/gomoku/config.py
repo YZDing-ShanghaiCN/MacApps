@@ -1,5 +1,7 @@
 """Shared configuration for the Gomoku app."""
 
+import os
+
 BOARD_SIZE = 15
 CELL_SIZE = 40
 MARGIN = 40
@@ -18,6 +20,9 @@ AI_DIFFICULTIES = (
     AI_DIFFICULTY_NORMAL,
     AI_DIFFICULTY_HARD,
 )
+
+PUBLIC_BASE_URL = os.getenv("GOMOKU_PUBLIC_BASE_URL", "").rstrip("/")
+ROOM_TTL_SECONDS = int(os.getenv("GOMOKU_ROOM_TTL_SECONDS", str(12 * 60 * 60)))
 
 WINDOW_WIDTH = MARGIN * 2 + CELL_SIZE * (BOARD_SIZE - 1)
 WINDOW_HEIGHT = WINDOW_WIDTH + INFO_HEIGHT
