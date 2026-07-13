@@ -1,13 +1,19 @@
 const boardElement = document.querySelector("#board");
 const modeStatusElement = document.querySelector("#mode-status");
 const statusElement = document.querySelector("#status");
+const timerElement = document.querySelector("#timer");
 const messageElement = document.querySelector("#message");
 const modeLocalButton = document.querySelector("#mode-local-button");
 const modeAiButton = document.querySelector("#mode-ai-button");
+const difficultySimpleButton = document.querySelector("#difficulty-simple-button");
+const difficultyNormalButton = document.querySelector("#difficulty-normal-button");
+const difficultyHardButton = document.querySelector("#difficulty-hard-button");
+const startButton = document.querySelector("#start-button");
 const resetButton = document.querySelector("#reset-button");
 const undoButton = document.querySelector("#undo-button");
 
 let currentState = null;
+let stateReceivedAt = 0;
 let requestInFlight = false;
 
 const MODE_LABELS = {
@@ -88,6 +94,12 @@ function updateMode(state) {
   modeStatusElement.textContent = `模式：${modeLabel(mode)}`;
   modeLocalButton.setAttribute("aria-pressed", String(mode === "local_2p"));
   modeAiButton.setAttribute("aria-pressed", String(mode === "vs_ai"));
+  const aiMode = mode === "vs_ai";
+  difficultySimpleButton.disabled = !aiMode;
+  difficultySimpleButton.setAttribute("aria-pressed", String(aiMode));
+  difficultyNormalButton.disabled = true;
+  difficultyHardButton.disabled = true;
+  startButton.disabled = state.timer_running || state.game_over;
 }
 
 function updateStatus(state) {
@@ -101,11 +113,42 @@ function updateStatus(state) {
     return;
   }
 
+  if (!state.timer_running) {
+    statusElement.textContent = "准备中，请点击开始对局";
+    return;
+  }
+
   statusElement.textContent = `当前：${playerLabel(state.current_player_name)}`;
+}
+
+function formatDuration(seconds) {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function displayedTime(state, color) {
+  let elapsed = Number(state.time_spent?.[color] || 0);
+  const activeColor = state.current_player === 1 ? "black" : "white";
+  if (state.timer_running && !state.game_over && color === activeColor) {
+    elapsed += (Date.now() - stateReceivedAt) / 1000;
+  }
+  return elapsed;
+}
+
+function updateTimer(state) {
+  timerElement.textContent = [
+    `黑棋 ${formatDuration(displayedTime(state, "black"))}`,
+    `白棋 ${formatDuration(displayedTime(state, "white"))}`,
+  ].join("　");
 }
 
 function renderBoard(state) {
   boardElement.innerHTML = "";
+  const winningCells = new Set(
+    (state.winning_line || []).map(({ row, col }) => `${row},${col}`),
+  );
 
   state.board.forEach((row, rowIndex) => {
     row.forEach((cell, colIndex) => {
@@ -115,10 +158,14 @@ function renderBoard(state) {
         state.last_move.col === colIndex;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = isLastMove ? "cell last-move" : "cell";
+      button.className = [
+        "cell",
+        isLastMove ? "last-move" : "",
+        winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
+      ].filter(Boolean).join(" ");
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
-      button.disabled = state.game_over || cell !== 0;
+      button.disabled = state.game_over || !state.timer_running || cell !== 0;
       button.setAttribute("aria-label", `Row ${rowIndex + 1}, column ${colIndex + 1}`);
 
       if (cell !== 0) {
@@ -134,8 +181,10 @@ function renderBoard(state) {
 
 function render(state) {
   currentState = state;
+  stateReceivedAt = Date.now();
   updateMode(state);
   updateStatus(state);
+  updateTimer(state);
   renderBoard(state);
 }
 
@@ -160,6 +209,23 @@ async function playMove(row, col) {
       method: "POST",
       body: JSON.stringify({ row, col }),
     });
+    render(state);
+    setMessage("");
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    requestInFlight = false;
+  }
+}
+
+async function startGame() {
+  if (requestInFlight) {
+    return;
+  }
+
+  requestInFlight = true;
+  try {
+    const state = await requestJson("/api/start", { method: "POST" });
     render(state);
     setMessage("");
   } catch (error) {
@@ -203,6 +269,14 @@ modeAiButton.addEventListener("click", () => {
   changeMode("vs_ai");
 });
 
+difficultySimpleButton.addEventListener("click", () => {
+  setMessage("当前 AI 难度：简单");
+});
+
+startButton.addEventListener("click", () => {
+  startGame();
+});
+
 resetButton.addEventListener("click", async () => {
   try {
     const state = await requestJson("/api/reset", { method: "POST" });
@@ -224,3 +298,8 @@ undoButton.addEventListener("click", async () => {
 });
 
 loadState();
+window.setInterval(() => {
+  if (currentState) {
+    updateTimer(currentState);
+  }
+}, 250);

@@ -86,12 +86,22 @@ def test_state_contains_web_fields() -> None:
         "move_count",
         "current_player_name",
         "winner_name",
+        "winning_line",
+        "timer_running",
+        "time_spent",
         "last_move",
         "mode",
         "ai_player",
     }.issubset(response["body"])
     assert response["body"]["mode"] == config.MODE_LOCAL_2P
     assert response["body"]["ai_player"] is None
+
+
+def test_start_enables_cumulative_timer() -> None:
+    response = request("POST", "/api/start")
+
+    assert response["status"] == 200
+    assert response["body"]["timer_running"] is True
 
 
 def test_move_returns_updated_state() -> None:

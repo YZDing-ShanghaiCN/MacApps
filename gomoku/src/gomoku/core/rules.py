@@ -38,21 +38,52 @@ def count_direction(
 
 
 def check_win(board: Board, row: int, col: int, player: Player | int) -> bool:
+    return find_winning_line(board, row, col, player) is not None
+
+
+def find_winning_line(
+    board: Board,
+    row: int,
+    col: int,
+    player: Player | int,
+) -> tuple[tuple[int, int], ...] | None:
+    """Return the complete winning line containing the latest move."""
+
     if not board.is_inside(row, col):
-        return False
+        return None
 
     player_value = Player(player)
     if player_value == Player.EMPTY:
-        return False
+        return None
 
     for dr, dc in DIRECTIONS:
-        total = 1
-        total += count_direction(board, row, col, dr, dc, player_value)
-        total += count_direction(board, row, col, -dr, -dc, player_value)
-        if total >= WIN_LENGTH:
-            return True
+        backward = []
+        current_row = row - dr
+        current_col = col - dc
+        while (
+            board.is_inside(current_row, current_col)
+            and board.grid[current_row][current_col] == int(player_value)
+        ):
+            backward.append((current_row, current_col))
+            current_row -= dr
+            current_col -= dc
 
-    return False
+        forward = []
+        current_row = row + dr
+        current_col = col + dc
+        while (
+            board.is_inside(current_row, current_col)
+            and board.grid[current_row][current_col] == int(player_value)
+        ):
+            forward.append((current_row, current_col))
+            current_row += dr
+            current_col += dc
+
+        line = tuple(reversed(backward)) + ((row, col),) + tuple(forward)
+        if len(line) >= WIN_LENGTH:
+            return line
+
+    return None
 
 
 def get_valid_moves(board: Board) -> list[tuple[int, int]]:

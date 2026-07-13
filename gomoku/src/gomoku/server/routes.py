@@ -123,6 +123,12 @@ def reset_game(payload: dict | None = Body(default=None)):
     return state_response()
 
 
+@router.post("/start")
+def start_game() -> dict:
+    game.start_timer()
+    return state_response()
+
+
 @router.post("/undo")
 def undo_move() -> dict:
     undo_for_current_mode()

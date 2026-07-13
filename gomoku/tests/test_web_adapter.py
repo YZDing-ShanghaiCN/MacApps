@@ -66,6 +66,10 @@ def test_win_state_serializes_winner_and_game_over() -> None:
     assert state["winner"] == int(Player.BLACK)
     assert state["winner_name"] == "Black"
     assert state["move_count"] == 9
+    assert state["winning_line"] == [
+        {"row": 0, "col": col}
+        for col in range(5)
+    ]
 
 
 def test_serialize_game_state_includes_ai_mode_fields() -> None:
@@ -79,3 +83,13 @@ def test_serialize_game_state_includes_ai_mode_fields() -> None:
 
     assert state["mode"] == config.MODE_VS_AI
     assert state["ai_player"] == int(Player.WHITE)
+
+
+def test_serialize_game_state_includes_timer_fields() -> None:
+    game = GomokuGame()
+    game.start_timer()
+
+    state = serialize_game_state(game)
+
+    assert state["timer_running"] is True
+    assert state["time_spent"] == {"black": 0.0, "white": 0.0}

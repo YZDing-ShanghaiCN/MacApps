@@ -54,6 +54,7 @@ h1 {
 
 .mode-status,
 .status,
+.timer,
 .message {
   min-height: 24px;
   margin: 0;
@@ -78,6 +79,7 @@ h1 {
 }
 
 .mode-actions,
+.difficulty-actions,
 .actions {
   display: flex;
   gap: 8px;
@@ -86,6 +88,7 @@ h1 {
 }
 
 .mode-actions button,
+.difficulty-actions button,
 .actions button {
   border: 1px solid #9d8a73;
   border-radius: 6px;
@@ -102,8 +105,18 @@ h1 {
 }
 
 .mode-actions button:hover,
+.difficulty-actions button:hover,
 .actions button:hover {
   border-color: var(--accent);
+}
+
+.mode-actions button:disabled,
+.difficulty-actions button:disabled,
+.actions button:disabled {
+  border-color: #c8bdaf;
+  background: #ebe5dd;
+  color: #908779;
+  cursor: not-allowed;
 }
 
 .board {
@@ -148,6 +161,13 @@ h1 {
     0 2px 5px rgb(0 0 0 / 25%);
 }
 
+.cell.winning-cell .stone {
+  box-shadow:
+    0 0 0 4px #e0a629,
+    0 0 14px 3px rgb(224 166 41 / 75%),
+    0 2px 5px rgb(0 0 0 / 25%);
+}
+
 .stone {
   width: 72%;
   aspect-ratio: 1;
@@ -186,12 +206,14 @@ h1 {
   }
 
   .mode-actions,
+  .difficulty-actions,
   .actions {
     justify-content: flex-start;
     width: 100%;
   }
 
   .mode-actions button,
+  .difficulty-actions button,
   .actions button {
     flex: 1 1 120px;
   }

@@ -14,6 +14,7 @@
             <h1>Gomoku</h1>
             <p id="mode-status" class="mode-status">模式：双人对战</p>
             <p id="status" class="status">Loading...</p>
+            <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
           </div>
           <div class="controls">
             <div class="mode-actions" role="group" aria-label="选择对战模式">
@@ -24,7 +25,19 @@
                 人机对战
               </button>
             </div>
+            <div class="difficulty-actions" role="group" aria-label="选择 AI 难度">
+              <button id="difficulty-simple-button" type="button" aria-pressed="true">
+                简单
+              </button>
+              <button id="difficulty-normal-button" type="button" disabled>
+                普通（开发中）
+              </button>
+              <button id="difficulty-hard-button" type="button" disabled>
+                困难（开发中）
+              </button>
+            </div>
             <div class="actions">
+              <button id="start-button" type="button">开始对局</button>
               <button id="undo-button" type="button">悔棋</button>
               <button id="reset-button" type="button">重新开始</button>
             </div>
