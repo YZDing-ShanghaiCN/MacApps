@@ -13,16 +13,6 @@ DIRECTIONS = (
     (1, 1),
     (1, -1),
 )
-RING_OFFSETS = (
-    (-1, -1),
-    (-1, 0),
-    (-1, 1),
-    (0, -1),
-    (0, 1),
-    (1, -1),
-    (1, 0),
-    (1, 1),
-)
 
 
 class RandomAI:
@@ -36,10 +26,12 @@ class RandomAI:
 
 
 class SimpleAI:
-    """Deterministic rule-based AI.
+    """Rule-based AI with a fixed priority table for continuous lines.
 
-    The AI follows a fixed first-match decision table. It does not use a
-    value function, learning, random choices, or multi-move search.
+    The AI first extends its own continuous lines, then blocks the opponent's
+    lines of the same length. Only the blocking endpoint is random; if no
+    continuous line of length two or greater can be extended, the AI chooses
+    a random legal move.
     """
 
     def __init__(self, player: Player | int = Player.WHITE) -> None:
@@ -64,149 +56,90 @@ class SimpleAI:
         if opponent == Player.EMPTY:
             return valid_moves[0]
 
-        # The order below is the complete fixed policy. A later rule never
-        # overrides an earlier matching rule.
-        move = self._find_completion_move(board, ai_player, 5)
-        if move is not None:
-            return move
+        # A higher line length always wins. For a given length, extending our
+        # own line takes precedence over blocking the opponent's line.
+        # ``last_opponent_move`` remains part of the public API for callers,
+        # but the complete board state now determines every strategy choice.
+        for line_length in (4, 3, 2):
+            move = self._find_extension_move(board, ai_player, line_length)
+            if move is not None:
+                return move
 
-        move = self._find_completion_move(board, opponent, 5)
-        if move is not None:
-            return move
+            move = self._find_extension_move(
+                board,
+                opponent,
+                line_length,
+                randomize_endpoint=True,
+            )
+            if move is not None:
+                return move
 
-        move = self._find_completion_move(board, ai_player, 4)
-        if move is not None:
-            return move
+        return random.choice(valid_moves)
 
-        move = self._find_completion_move(board, opponent, 4)
-        if move is not None:
-            return move
-
-        if self._is_valid_opponent_move(board, opponent, last_opponent_move):
-            row, col = last_opponent_move
-            if self._is_isolated_move(board, row, col, opponent):
-                move = self._move_in_ring(board, row, col)
-                if move is not None:
-                    return move
-
-        move = self._find_completion_move(board, opponent, 3)
-        if move is not None:
-            return move
-
-        return self._fixed_fallback_move(board, valid_moves)
-
-    def _is_valid_opponent_move(
-        self,
-        board: Board,
-        opponent: Player,
-        move: object,
-    ) -> bool:
-        if move is None:
-            return False
-
-        try:
-            row, col = move
-        except (TypeError, ValueError):
-            return False
-
-        if not isinstance(row, int) or not isinstance(col, int):
-            return False
-
-        return board.is_inside(row, col) and board.grid[row][col] == int(opponent)
-
-    def _find_completion_move(
+    def _find_extension_move(
         self,
         board: Board,
         player: Player,
         line_length: int,
+        *,
+        randomize_endpoint: bool = False,
     ) -> tuple[int, int] | None:
-        """Find the first direct line completion in fixed scan order."""
+        """Find a legal endpoint of the first matching maximal line.
 
-        if line_length <= 1:
+        A line is considered only when it consists of exactly ``line_length``
+        adjacent stones. This deliberately excludes gapped shapes such as
+        ``XX_X`` and longer lines. A line with no empty endpoint is dead and
+        cannot match this rule.
+        """
+
+        if line_length < 2:
             return None
 
         for dr, dc in DIRECTIONS:
             for row in range(board.size):
                 for col in range(board.size):
-                    cells = self._window_cells(board, row, col, dr, dc, line_length)
-                    if cells is None:
+                    if board.grid[row][col] != int(player):
                         continue
 
-                    values = [board.grid[current_row][current_col] for current_row, current_col in cells]
-                    if values.count(int(player)) != line_length - 1:
-                        continue
-                    if values.count(int(Player.EMPTY)) != 1:
+                    before_row = row - dr
+                    before_col = col - dc
+                    if (
+                        board.is_inside(before_row, before_col)
+                        and board.grid[before_row][before_col] == int(player)
+                    ):
                         continue
 
-                    return cells[values.index(int(Player.EMPTY))]
+                    end_row = row
+                    end_col = col
+                    current_length = 1
+                    while True:
+                        next_row = end_row + dr
+                        next_col = end_col + dc
+                        if (
+                            not board.is_inside(next_row, next_col)
+                            or board.grid[next_row][next_col] != int(player)
+                        ):
+                            break
+                        end_row = next_row
+                        end_col = next_col
+                        current_length += 1
+
+                    if current_length != line_length:
+                        continue
+
+                    endpoints = [
+                        (candidate_row, candidate_col)
+                        for candidate_row, candidate_col in (
+                            (before_row, before_col),
+                            (end_row + dr, end_col + dc),
+                        )
+                        if board.is_empty(candidate_row, candidate_col)
+                    ]
+                    if not endpoints:
+                        continue
+
+                    if randomize_endpoint:
+                        return random.choice(endpoints)
+                    return endpoints[0]
 
         return None
-
-    def _window_cells(
-        self,
-        board: Board,
-        row: int,
-        col: int,
-        dr: int,
-        dc: int,
-        length: int,
-    ) -> list[tuple[int, int]] | None:
-        end_row = row + (length - 1) * dr
-        end_col = col + (length - 1) * dc
-        if not board.is_inside(end_row, end_col):
-            return None
-
-        return [
-            (row + offset * dr, col + offset * dc)
-            for offset in range(length)
-        ]
-
-    def _is_isolated_move(
-        self,
-        board: Board,
-        row: int,
-        col: int,
-        player: Player,
-    ) -> bool:
-        for dr, dc in DIRECTIONS:
-            for sign in (-1, 1):
-                neighbor_row = row + sign * dr
-                neighbor_col = col + sign * dc
-                if (
-                    board.is_inside(neighbor_row, neighbor_col)
-                    and board.grid[neighbor_row][neighbor_col] == int(player)
-                ):
-                    return False
-
-        return True
-
-    def _move_in_ring(
-        self,
-        board: Board,
-        row: int,
-        col: int,
-    ) -> tuple[int, int] | None:
-        for row_offset, col_offset in RING_OFFSETS:
-            candidate = (row + row_offset, col + col_offset)
-            if board.is_empty(*candidate):
-                return candidate
-
-        return None
-
-    def _fixed_fallback_move(
-        self,
-        board: Board,
-        valid_moves: list[tuple[int, int]],
-    ) -> tuple[int, int]:
-        """Use a fixed center-out coordinate order without scoring."""
-
-        center = board.size // 2
-        for distance in range(board.size):
-            for row in range(board.size):
-                for col in range(board.size):
-                    if max(abs(row - center), abs(col - center)) != distance:
-                        continue
-                    if board.is_empty(row, col):
-                        return row, col
-
-        return valid_moves[0]
