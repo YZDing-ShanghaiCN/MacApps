@@ -14,6 +14,13 @@ DIRECTIONS = (
     (1, -1),
 )
 
+NEIGHBOR_DIRECTIONS = tuple(
+    (row_offset, col_offset)
+    for row_offset in (-1, 0, 1)
+    for col_offset in (-1, 0, 1)
+    if (row_offset, col_offset) != (0, 0)
+)
+
 
 class RandomAI:
     """First-stage AI placeholder that chooses a random legal move."""
@@ -29,9 +36,10 @@ class SimpleAI:
     """Rule-based AI with a fixed priority table for continuous lines.
 
     The AI first extends its own continuous lines, then blocks the opponent's
-    lines of the same length. Only the blocking endpoint is random; if no
-    continuous line of length two or greater can be extended, the AI chooses
-    a random legal move.
+    lines of the same length. Only the blocking endpoint is random. If no
+    continuous line of length two or greater can be extended, the AI first
+    grows an isolated own stone and then blocks an isolated opponent stone.
+    It chooses randomly only when no such nearby move exists.
     """
 
     def __init__(self, player: Player | int = Player.WHITE) -> None:
@@ -74,7 +82,48 @@ class SimpleAI:
             if move is not None:
                 return move
 
+        move = self._find_isolated_stone_neighbor(board, ai_player)
+        if move is not None:
+            return move
+
+        move = self._find_isolated_stone_neighbor(board, opponent)
+        if move is not None:
+            return move
+
         return random.choice(valid_moves)
+
+    def _find_isolated_stone_neighbor(
+        self,
+        board: Board,
+        player: Player,
+    ) -> tuple[int, int] | None:
+        """Find the first legal square around an isolated stone.
+
+        An isolated stone has no friendly stone in any of its eight adjacent
+        squares. Scanning the surrounding ring in a fixed order keeps this
+        low-priority strategy deterministic rather than selecting a random
+        move elsewhere on the board.
+        """
+
+        for row in range(board.size):
+            for col in range(board.size):
+                if board.grid[row][col] != int(player):
+                    continue
+                if any(
+                    board.is_inside(row + row_offset, col + col_offset)
+                    and board.grid[row + row_offset][col + col_offset]
+                    == int(player)
+                    for row_offset, col_offset in NEIGHBOR_DIRECTIONS
+                ):
+                    continue
+
+                for row_offset, col_offset in NEIGHBOR_DIRECTIONS:
+                    candidate_row = row + row_offset
+                    candidate_col = col + col_offset
+                    if board.is_empty(candidate_row, candidate_col):
+                        return candidate_row, candidate_col
+
+        return None
 
     def _find_extension_move(
         self,
