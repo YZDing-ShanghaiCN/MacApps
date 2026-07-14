@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 
@@ -10,4 +11,8 @@ import uvicorn
 
 
 if __name__ == "__main__":
-    uvicorn.run("gomoku.server.app:app", host="127.0.0.1", port=8000)
+    uvicorn.run(
+        "gomoku.server.app:app",
+        host=os.getenv("GOMOKU_HOST", "127.0.0.1"),
+        port=int(os.getenv("GOMOKU_PORT", "8000")),
+    )

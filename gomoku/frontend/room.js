@@ -95,7 +95,7 @@ function updateLobby(state) {
   acceptConfigurationButton.disabled = phase !== "waiting_for_owner_confirmation";
 
   if (phase === "waiting_for_guest") {
-    statusElement.textContent = "等待女朋友通过邀请链接加入";
+    statusElement.textContent = "等待好友通过邀请链接加入";
   } else if (phase === "waiting_for_configuration") {
     statusElement.textContent = you.role === "guest" ? "请选择棋色和先手" : "等待受邀者选择棋色和先手";
   } else if (phase === "waiting_for_owner_confirmation") {
@@ -312,7 +312,7 @@ copyInviteButton.addEventListener("click", async () => {
   }
   try {
     await navigator.clipboard.writeText(inviteUrl);
-    setMessage("邀请链接已复制，可以发送给女朋友。");
+    setMessage("邀请链接已复制，可以发送给好友。");
   } catch {
     window.prompt("复制邀请链接", inviteUrl);
   }
