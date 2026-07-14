@@ -11,16 +11,29 @@ const guestSettingsElement = document.querySelector("#guest-settings");
 const ownerConfirmationElement = document.querySelector("#owner-confirmation");
 const submitConfigurationButton = document.querySelector("#submit-configuration-button");
 const acceptConfigurationButton = document.querySelector("#accept-configuration-button");
+const shareInviteButton = document.querySelector("#share-invite-button");
+const reconnectButton = document.querySelector("#reconnect-button");
 const copyInviteButton = document.querySelector("#copy-invite-button");
 const undoButton = document.querySelector("#undo-button");
 const rematchButton = document.querySelector("#rematch-button");
+const inviteDialog = document.querySelector("#invite-dialog");
+const inviteCloseButton = document.querySelector("#invite-close-button");
+const inviteSavedButton = document.querySelector("#invite-saved-button");
+const inviteQrImage = document.querySelector("#invite-qr-image");
+const inviteLinkPreview = document.querySelector("#invite-link-preview");
+const resultDialog = document.querySelector("#game-result-dialog");
+const resultTitleElement = document.querySelector("#result-title");
+const resultSummaryElement = document.querySelector("#result-summary");
+const resultPrimaryButton = document.querySelector("#result-primary-button");
+const resultSecondaryButton = document.querySelector("#result-secondary-button");
+const resultCloseButton = document.querySelector("#result-close-button");
 const guestColorButtons = document.querySelectorAll("[data-guest-color]");
 const firstPlayerButtons = document.querySelectorAll("[data-first-player]");
 
 const roomId = window.location.pathname.split("/").filter(Boolean).at(-1);
 const roomStorageKey = `gomoku.room.${roomId}.token`;
 const inviteStorageKey = `gomoku.room.${roomId}.invite_url`;
-const tokenFromUrl = new URLSearchParams(window.location.search).get("token");
+const tokenFromUrl = new URLSearchParams(window.location.hash.slice(1)).get("token");
 
 let token = tokenFromUrl || sessionStorage.getItem(roomStorageKey);
 let socket = null;
@@ -29,10 +42,26 @@ let stateReceivedAt = 0;
 let selectedGuestColor = "black";
 let selectedFirstPlayer = "black";
 let reconnectTimer = null;
+let inviteQrObjectUrl = null;
+let invitePrompted = false;
+let displayedResultKey = null;
 
 if (tokenFromUrl) {
   sessionStorage.setItem(roomStorageKey, tokenFromUrl);
   window.history.replaceState({}, "", window.location.pathname);
+}
+
+function storedInviteUrl() {
+  const stored = localStorage.getItem(inviteStorageKey) || sessionStorage.getItem(inviteStorageKey);
+  if (!stored) {
+    return null;
+  }
+  try {
+    const record = JSON.parse(stored);
+    return typeof record.inviteUrl === "string" ? record.inviteUrl : null;
+  } catch {
+    return stored;
+  }
 }
 
 function setMessage(message) {
@@ -92,7 +121,9 @@ function updateLobby(state) {
     you.role === "owner" && phase === "waiting_for_owner_confirmation"
   );
   submitConfigurationButton.disabled = phase !== "waiting_for_configuration" && phase !== "waiting_for_owner_confirmation";
-  acceptConfigurationButton.disabled = phase !== "waiting_for_owner_confirmation";
+  acceptConfigurationButton.disabled = phase !== "waiting_for_owner_confirmation" || !(
+    participants.owner_connected && participants.guest_connected
+  );
 
   if (phase === "waiting_for_guest") {
     statusElement.textContent = "等待好友通过邀请链接加入";
@@ -104,6 +135,10 @@ function updateLobby(state) {
 }
 
 function updateGameStatus(state) {
+  if (state.paused_for_disconnect) {
+    statusElement.textContent = "对方暂时断线，计时已暂停";
+    return;
+  }
   if (state.winner) {
     statusElement.textContent = `${colorLabel(state.winner)}胜`;
     return;
@@ -115,12 +150,25 @@ function updateGameStatus(state) {
   statusElement.textContent = state.you.player === state.current_player ? "轮到你落子" : "等待对方落子";
 }
 
+function updateConnectionState(state) {
+  const bothPlayersConnected = state.participants.owner_connected && state.participants.guest_connected;
+  if (state.paused_for_disconnect) {
+    roomStatusElement.dataset.connectionState = "paused";
+  } else if (bothPlayersConnected) {
+    roomStatusElement.dataset.connectionState = "online";
+  } else {
+    roomStatusElement.dataset.connectionState = "waiting";
+  }
+}
+
 function renderBoard(state) {
   boardElement.innerHTML = "";
   const winningCells = new Set(
     (state.winning_line || []).map(({ row, col }) => `${row},${col}`),
   );
-  const canMove = state.phase === "playing" && state.you.player === state.current_player;
+  const canMove = state.phase === "playing" &&
+    !state.paused_for_disconnect &&
+    state.you.player === state.current_player;
 
   state.board.forEach((row, rowIndex) => {
     row.forEach((cell, colIndex) => {
@@ -133,6 +181,7 @@ function renderBoard(state) {
         "cell",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
+        canMove ? (state.current_player === 1 ? "preview-black" : "preview-white") : "",
       ].filter(Boolean).join(" ");
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
@@ -149,30 +198,61 @@ function renderBoard(state) {
   });
 }
 
+function resultKey(state) {
+  return `${state.move_history.length}:${state.winner || "draw"}`;
+}
+
+function updateResultDialog(state) {
+  if (state.phase !== "finished") {
+    displayedResultKey = null;
+    if (resultDialog.open) {
+      resultDialog.close();
+    }
+    return;
+  }
+
+  resultTitleElement.textContent = state.winner ? `${colorLabel(state.winner)}胜` : "平局";
+  resultSummaryElement.textContent = [
+    `黑棋累计 ${formatDuration(state.time_spent?.black || 0)}`,
+    `白棋累计 ${formatDuration(state.time_spent?.white || 0)}`,
+  ].join("　");
+  resultPrimaryButton.textContent = rematchButton.textContent;
+  resultPrimaryButton.disabled = rematchButton.disabled;
+
+  const key = resultKey(state);
+  if (displayedResultKey !== key) {
+    displayedResultKey = key;
+    if (!resultDialog.open) {
+      resultDialog.showModal();
+    }
+  }
+}
+
 function updateActionButtons(state) {
   const { you, undo_requested_by: undoRequestedBy, rematch_requested_by: rematchRequestedBy } = state;
+  const bothPlayersConnected = state.participants.owner_connected && state.participants.guest_connected;
   undoButton.hidden = state.phase !== "playing";
   if (undoRequestedBy === null) {
     undoButton.textContent = "请求悔棋";
-    undoButton.disabled = state.move_history.length === 0;
+    undoButton.disabled = state.move_history.length === 0 || !bothPlayersConnected;
   } else if (undoRequestedBy === you.role) {
     undoButton.textContent = "等待对方确认悔棋";
     undoButton.disabled = true;
   } else {
     undoButton.textContent = "接受悔棋";
-    undoButton.disabled = false;
+    undoButton.disabled = !bothPlayersConnected;
   }
 
   rematchButton.hidden = state.phase !== "finished";
   if (rematchRequestedBy === null) {
     rematchButton.textContent = "请求再来一局";
-    rematchButton.disabled = false;
+    rematchButton.disabled = !bothPlayersConnected;
   } else if (rematchRequestedBy === you.role) {
     rematchButton.textContent = "等待对方确认再来一局";
     rematchButton.disabled = true;
   } else {
     rematchButton.textContent = "接受再来一局";
-    rematchButton.disabled = false;
+    rematchButton.disabled = !bothPlayersConnected;
   }
 }
 
@@ -180,7 +260,8 @@ function render(state) {
   currentState = state;
   stateReceivedAt = Date.now();
   roomStatusElement.textContent = `房间已连接 · 你是${roleLabel(state.you.role)}`;
-  copyInviteButton.hidden = state.you.role !== "owner";
+  updateConnectionState(state);
+  shareInviteButton.hidden = state.you.role !== "owner";
   updateTimer(state);
   updateLobby(state);
   const isGameVisible = state.phase === "playing" || state.phase === "finished";
@@ -191,11 +272,17 @@ function render(state) {
     renderBoard(state);
     updateActionButtons(state);
   }
+  updateResultDialog(state);
 
   if (state.configuration && state.you.role === "guest") {
     selectedGuestColor = state.configuration.guest_player === 1 ? "black" : "white";
     selectedFirstPlayer = state.configuration.first_player === 1 ? "black" : "white";
     updateSelectionButtons();
+  }
+
+  if (state.you.role === "owner" && !invitePrompted && storedInviteUrl()) {
+    invitePrompted = true;
+    window.setTimeout(openInviteDialog, 0);
   }
 }
 
@@ -216,20 +303,62 @@ function send(message) {
   socket.send(JSON.stringify(message));
 }
 
+async function openInviteDialog() {
+  const inviteUrl = storedInviteUrl();
+  if (!inviteUrl) {
+    setMessage("未找到邀请链接。请在创建房间时保存链接。" );
+    return;
+  }
+
+  inviteLinkPreview.textContent = inviteUrl;
+  inviteQrImage.removeAttribute("src");
+  inviteQrImage.alt = "正在生成邀请二维码";
+  if (!inviteDialog.open) {
+    inviteDialog.showModal();
+  }
+
+  try {
+    const response = await fetch("/api/room-invite-qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invite_url: inviteUrl }),
+    });
+    const data = await response.text();
+    if (!response.ok) {
+      throw new Error(data ? JSON.parse(data).error : "二维码生成失败。" );
+    }
+    if (inviteQrObjectUrl) {
+      URL.revokeObjectURL(inviteQrObjectUrl);
+    }
+    inviteQrObjectUrl = URL.createObjectURL(new Blob([data], { type: "image/svg+xml" }));
+    inviteQrImage.src = inviteQrObjectUrl;
+    inviteQrImage.alt = "私人房间邀请二维码";
+  } catch (error) {
+    inviteQrImage.alt = "二维码生成失败";
+    setMessage(error.message || "二维码生成失败，请复制邀请链接发送。" );
+  }
+}
+
 function connect() {
   if (!token) {
     roomStatusElement.textContent = "邀请链接无效或已失效";
+    roomStatusElement.dataset.connectionState = "invalid";
+    return;
+  }
+  if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
     return;
   }
 
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const url = new URL(`/ws/rooms/${encodeURIComponent(roomId)}`, `${protocol}://${window.location.host}`);
-  url.searchParams.set("token", token);
+  roomStatusElement.dataset.connectionState = "reconnecting";
   socket = new WebSocket(url);
 
   socket.addEventListener("open", () => {
     setMessage("");
     roomStatusElement.textContent = "房间已连接";
+    reconnectButton.hidden = true;
+    socket.send(JSON.stringify({ type: "authenticate", token }));
   });
   socket.addEventListener("message", (event) => {
     const payload = JSON.parse(event.data);
@@ -242,9 +371,17 @@ function connect() {
   socket.addEventListener("close", (event) => {
     if (event.code === 1008) {
       roomStatusElement.textContent = "邀请链接无效或已失效";
+      roomStatusElement.dataset.connectionState = "invalid";
+      return;
+    }
+    if (event.code === 4001) {
+      roomStatusElement.textContent = "该席位已在另一设备打开";
+      roomStatusElement.dataset.connectionState = "other-device";
       return;
     }
     roomStatusElement.textContent = "连接断开，正在重连...";
+    roomStatusElement.dataset.connectionState = "reconnecting";
+    reconnectButton.hidden = false;
     window.clearTimeout(reconnectTimer);
     reconnectTimer = window.setTimeout(connect, 1500);
   });
@@ -296,18 +433,24 @@ undoButton.addEventListener("click", () => {
   }
 });
 
-rematchButton.addEventListener("click", () => {
+function requestRematch() {
   if (currentState?.rematch_requested_by && currentState.rematch_requested_by !== currentState.you.role) {
     send({ type: "accept_rematch" });
   } else {
     send({ type: "request_rematch" });
   }
+}
+
+rematchButton.addEventListener("click", requestRematch);
+
+shareInviteButton.addEventListener("click", () => {
+  openInviteDialog();
 });
 
 copyInviteButton.addEventListener("click", async () => {
-  const inviteUrl = sessionStorage.getItem(inviteStorageKey);
+  const inviteUrl = storedInviteUrl();
   if (!inviteUrl) {
-    setMessage("邀请链接仅在创建房间的浏览器会话中可复制。");
+    setMessage("未找到邀请链接。请在创建房间时保存链接。" );
     return;
   }
   try {
@@ -316,6 +459,31 @@ copyInviteButton.addEventListener("click", async () => {
   } catch {
     window.prompt("复制邀请链接", inviteUrl);
   }
+});
+
+inviteCloseButton.addEventListener("click", () => {
+  inviteDialog.close();
+});
+
+inviteSavedButton.addEventListener("click", () => {
+  inviteDialog.close();
+  setMessage("邀请链接已保存在本机浏览器中。请勿公开转发。" );
+});
+
+reconnectButton.addEventListener("click", () => {
+  window.clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  connect();
+});
+
+resultPrimaryButton.addEventListener("click", requestRematch);
+
+resultSecondaryButton.addEventListener("click", () => {
+  window.location.assign("/");
+});
+
+resultCloseButton.addEventListener("click", () => {
+  resultDialog.close();
 });
 
 window.setInterval(() => {

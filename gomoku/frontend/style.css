@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -25,6 +29,12 @@ body {
 
 button {
   font: inherit;
+}
+
+button:focus-visible,
+.button-link:focus-visible {
+  outline: 3px solid #e0a629;
+  outline-offset: 3px;
 }
 
 .app-shell {
@@ -66,6 +76,30 @@ h1 {
   font-weight: 700;
 }
 
+.mode-status[data-connection-state]::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #908779;
+}
+
+.mode-status[data-connection-state="online"]::before {
+  background: var(--accent);
+}
+
+.mode-status[data-connection-state="paused"]::before,
+.mode-status[data-connection-state="reconnecting"]::before {
+  background: #e0a629;
+}
+
+.mode-status[data-connection-state="other-device"]::before,
+.mode-status[data-connection-state="invalid"]::before {
+  background: var(--danger);
+}
+
 .message {
   margin-top: 12px;
   color: var(--danger);
@@ -98,6 +132,16 @@ h1 {
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
+}
+
+.primary-button {
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+.primary-button:hover {
+  filter: brightness(1.08);
 }
 
 .mode-actions button[aria-pressed="true"] {
@@ -142,6 +186,36 @@ h1 {
   border-color: var(--accent);
 }
 
+.online-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid #b5d1cd;
+  border-radius: 12px;
+  background: #e9f3f1;
+}
+
+.online-entry h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.online-entry p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .lobby-panel {
   width: min(640px, 100%);
   padding: 20px;
@@ -171,6 +245,13 @@ h1 {
   justify-content: flex-start;
 }
 
+.orientation-hint {
+  display: none;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .board {
   width: calc(var(--cell-size) * 15 + 4px);
   height: calc(var(--cell-size) * 15 + 4px);
@@ -186,9 +267,12 @@ h1 {
   background-size: var(--cell-size) var(--cell-size);
   background-position: calc(var(--cell-size) / 2) calc(var(--cell-size) / 2);
   box-shadow: 0 12px 28px rgb(74 50 29 / 18%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .cell {
+  position: relative;
   width: var(--cell-size);
   height: var(--cell-size);
   display: grid;
@@ -205,6 +289,25 @@ h1 {
 
 .cell:not(:disabled):hover {
   background: rgb(255 255 255 / 18%);
+}
+
+.cell.preview-black:active::after,
+.cell.preview-white:active::after {
+  content: "";
+  width: 68%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.cell.preview-black:active::after {
+  background: #181818;
+}
+
+.cell.preview-white:active::after {
+  border: 1px solid rgb(0 0 0 / 45%);
+  background: #f8f5ef;
 }
 
 .cell.last-move .stone {
@@ -234,6 +337,75 @@ h1 {
 .stone.white {
   background: #f8f5ef;
   border: 1px solid rgb(0 0 0 / 35%);
+}
+
+dialog {
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid #d2c2ac;
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 28%);
+}
+
+dialog::backdrop {
+  background: rgb(31 31 31 / 48%);
+}
+
+.dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  background: #ebe5dd;
+}
+
+.result-dialog h2,
+.invite-dialog h2 {
+  margin: 0 0 8px;
+}
+
+.dialog-actions {
+  margin-top: 20px;
+  justify-content: flex-start;
+}
+
+.invite-dialog > p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.invite-qr {
+  display: block;
+  width: min(240px, 100%);
+  margin: 20px auto 14px;
+  border: 10px solid #fff;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.invite-link-preview {
+  max-height: 72px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #d2c2ac;
+  border-radius: 6px;
+  background: #f7f1e9;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
 @media (max-width: 560px) {
@@ -270,5 +442,30 @@ h1 {
   .option-actions button,
   .actions button {
     flex: 1 1 120px;
+  }
+
+  .online-entry {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .online-entry .primary-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .orientation-hint {
+    display: block;
+  }
+}
+
+@media (max-width: 560px) and (orientation: landscape) {
+  .app-shell {
+    padding: 10px 16px;
+  }
+
+  .orientation-hint {
+    display: none;
   }
 }

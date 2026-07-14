@@ -5,6 +5,7 @@ const timerElement = document.querySelector("#timer");
 const messageElement = document.querySelector("#message");
 const modeLocalButton = document.querySelector("#mode-local-button");
 const modeAiButton = document.querySelector("#mode-ai-button");
+const difficultyActionsElement = document.querySelector("#difficulty-actions");
 const difficultySimpleButton = document.querySelector("#difficulty-simple-button");
 const difficultyNormalButton = document.querySelector("#difficulty-normal-button");
 const difficultyHardButton = document.querySelector("#difficulty-hard-button");
@@ -12,10 +13,17 @@ const createRoomButton = document.querySelector("#create-room-button");
 const startButton = document.querySelector("#start-button");
 const resetButton = document.querySelector("#reset-button");
 const undoButton = document.querySelector("#undo-button");
+const resultDialog = document.querySelector("#game-result-dialog");
+const resultTitleElement = document.querySelector("#result-title");
+const resultSummaryElement = document.querySelector("#result-summary");
+const resultPrimaryButton = document.querySelector("#result-primary-button");
+const resultSecondaryButton = document.querySelector("#result-secondary-button");
+const resultCloseButton = document.querySelector("#result-close-button");
 
 let currentState = null;
 let stateReceivedAt = 0;
 let requestInFlight = false;
+let displayedResultKey = null;
 
 const MODE_LABELS = {
   local_2p: "双人对战",
@@ -96,6 +104,7 @@ function updateMode(state) {
   modeLocalButton.setAttribute("aria-pressed", String(mode === "local_2p"));
   modeAiButton.setAttribute("aria-pressed", String(mode === "vs_ai"));
   const aiMode = mode === "vs_ai";
+  difficultyActionsElement.hidden = !aiMode;
   difficultySimpleButton.disabled = !aiMode;
   difficultySimpleButton.setAttribute("aria-pressed", String(aiMode));
   difficultyNormalButton.disabled = true;
@@ -163,11 +172,14 @@ function renderBoard(state) {
         "cell",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
+        cell === 0 && state.timer_running && !state.game_over
+          ? (state.current_player === 1 ? "preview-black" : "preview-white")
+          : "",
       ].filter(Boolean).join(" ");
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
       button.disabled = state.game_over || !state.timer_running || cell !== 0;
-      button.setAttribute("aria-label", `Row ${rowIndex + 1}, column ${colIndex + 1}`);
+      button.setAttribute("aria-label", `第 ${rowIndex + 1} 行，第 ${colIndex + 1} 列`);
 
       if (cell !== 0) {
         const stone = document.createElement("span");
@@ -180,6 +192,33 @@ function renderBoard(state) {
   });
 }
 
+function resultKey(state) {
+  return `${state.move_count}:${state.winner_name || "draw"}`;
+}
+
+function updateResultDialog(state) {
+  if (!state.game_over) {
+    displayedResultKey = null;
+    return;
+  }
+
+  resultTitleElement.textContent = state.winner_name
+    ? `${playerLabel(state.winner_name)}胜`
+    : "平局";
+  resultSummaryElement.textContent = [
+    `黑棋累计 ${formatDuration(state.time_spent?.black || 0)}`,
+    `白棋累计 ${formatDuration(state.time_spent?.white || 0)}`,
+  ].join("　");
+
+  const key = resultKey(state);
+  if (displayedResultKey !== key) {
+    displayedResultKey = key;
+    if (!resultDialog.open) {
+      resultDialog.showModal();
+    }
+  }
+}
+
 function render(state) {
   currentState = state;
   stateReceivedAt = Date.now();
@@ -187,6 +226,7 @@ function render(state) {
   updateStatus(state);
   updateTimer(state);
   renderBoard(state);
+  updateResultDialog(state);
 }
 
 async function loadState() {
@@ -244,15 +284,27 @@ async function createPrivateRoom() {
   requestInFlight = true;
   try {
     const room = await requestJson("/api/rooms", { method: "POST" });
+    const invitationRecord = JSON.stringify({
+      inviteUrl: room.invite_url,
+      savedAt: Date.now(),
+    });
     sessionStorage.setItem(
       `gomoku.room.${room.room_id}.invite_url`,
-      room.invite_url,
+      invitationRecord,
     );
+    localStorage.setItem(`gomoku.room.${room.room_id}.invite_url`, invitationRecord);
     window.location.assign(room.owner_url);
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
+  } finally {
     requestInFlight = false;
   }
+}
+
+async function resetGame() {
+  const state = await requestJson("/api/reset", { method: "POST" });
+  render(state);
+  setMessage("");
 }
 
 boardElement.addEventListener("click", (event) => {
@@ -302,13 +354,31 @@ startButton.addEventListener("click", () => {
 });
 
 resetButton.addEventListener("click", async () => {
+  if (!window.confirm("确定要重新开始吗？当前棋局和累计用时将被清空。")) {
+    return;
+  }
   try {
-    const state = await requestJson("/api/reset", { method: "POST" });
-    render(state);
-    setMessage("");
+    await resetGame();
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
   }
+});
+
+resultPrimaryButton.addEventListener("click", async () => {
+  try {
+    await resetGame();
+    resultDialog.close();
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  }
+});
+
+resultSecondaryButton.addEventListener("click", () => {
+  resultDialog.close();
+});
+
+resultCloseButton.addEventListener("click", () => {
+  resultDialog.close();
 });
 
 undoButton.addEventListener("click", async () => {

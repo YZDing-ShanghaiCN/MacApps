@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <title>私人五子棋房间</title>
+    <meta name="theme-color" content="#2f6f67" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
@@ -18,7 +21,8 @@
             <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
           </div>
           <div class="actions room-actions">
-            <button id="copy-invite-button" type="button" hidden>复制邀请链接</button>
+            <button id="share-invite-button" class="primary-button" type="button" hidden>邀请好友</button>
+            <button id="reconnect-button" type="button" hidden>立即重连</button>
             <a class="button-link" href="/">返回本地对局</a>
           </div>
         </div>
@@ -50,7 +54,8 @@
         </section>
 
         <section id="game-panel" hidden>
-          <div id="board" class="board" aria-label="15 by 15 Gomoku board"></div>
+          <p class="orientation-hint">横屏使用可获得更大的棋盘和更准确的落子体验。</p>
+          <div id="board" class="board" aria-label="15×15 五子棋棋盘"></div>
           <div class="actions game-actions">
             <button id="undo-button" type="button">请求悔棋</button>
             <button id="rematch-button" type="button" hidden>请求再来一局</button>
@@ -61,6 +66,31 @@
       </section>
     </main>
 
+    <dialog id="invite-dialog" class="invite-dialog" aria-labelledby="invite-title">
+      <button id="invite-close-button" class="dialog-close" type="button" aria-label="关闭邀请窗口">×</button>
+      <p class="eyebrow">私人房间</p>
+      <h2 id="invite-title">邀请好友加入</h2>
+      <p>让好友扫描二维码，或复制完整链接发送给她。请勿公开分享。</p>
+      <img id="invite-qr-image" class="invite-qr" alt="私人房间邀请二维码" />
+      <p id="invite-link-preview" class="invite-link-preview"></p>
+      <div class="actions dialog-actions">
+        <button id="copy-invite-button" class="primary-button" type="button">复制邀请链接</button>
+        <button id="invite-saved-button" type="button">我已保存</button>
+      </div>
+    </dialog>
+
+    <dialog id="game-result-dialog" class="result-dialog" aria-labelledby="result-title">
+      <button id="result-close-button" class="dialog-close" type="button" aria-label="关闭结果窗口">×</button>
+      <p class="eyebrow">本局结束</p>
+      <h2 id="result-title">对局结束</h2>
+      <p id="result-summary" class="status"></p>
+      <div class="actions dialog-actions">
+        <button id="result-primary-button" class="primary-button" type="button">请求再来一局</button>
+        <button id="result-secondary-button" type="button">返回本地对局</button>
+      </div>
+    </dialog>
+
+    <script src="/static/pwa.js"></script>
     <script src="/static/room.js"></script>
   </body>
 </html>

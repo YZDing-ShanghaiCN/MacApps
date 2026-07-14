@@ -12,7 +12,9 @@ from gomoku.server.app import app
 
 
 def token_from(url: str) -> str:
-    return parse_qs(urlparse(url).query)["token"][0]
+    parsed = urlparse(url)
+    assert parsed.query == ""
+    return parse_qs(parsed.fragment)["token"][0]
 
 
 def test_private_room_websocket_syncs_lobby_and_moves() -> None:
@@ -21,20 +23,25 @@ def test_private_room_websocket_syncs_lobby_and_moves() -> None:
         room_id = created["room_id"]
         owner_token = token_from(created["owner_url"])
         guest_token = token_from(created["invite_url"])
+        qr_response = client.post(
+            "/api/room-invite-qr",
+            json={"invite_url": created["invite_url"]},
+        )
+        assert qr_response.status_code == 200
+        assert qr_response.headers["content-type"].startswith("image/svg+xml")
+        assert "<svg" in qr_response.text
         room_page = client.get(f"/room/{room_id}")
         assert room_page.status_code == 200
         assert "私人五子棋" in room_page.text
 
-        with client.websocket_connect(
-            f"/ws/rooms/{room_id}?token={owner_token}"
-        ) as owner_socket:
+        with client.websocket_connect(f"/ws/rooms/{room_id}") as owner_socket:
+            owner_socket.send_json({"type": "authenticate", "token": owner_token})
             owner_waiting = owner_socket.receive_json()["state"]
             assert owner_waiting["phase"] == "waiting_for_guest"
             assert owner_token not in str(owner_waiting)
 
-            with client.websocket_connect(
-                f"/ws/rooms/{room_id}?token={guest_token}"
-            ) as guest_socket:
+            with client.websocket_connect(f"/ws/rooms/{room_id}") as guest_socket:
+                guest_socket.send_json({"type": "authenticate", "token": guest_token})
                 owner_socket.receive_json()
                 assert guest_socket.receive_json()["state"]["phase"] == "waiting_for_configuration"
 

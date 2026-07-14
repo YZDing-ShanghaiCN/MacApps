@@ -4,10 +4,16 @@ import asyncio
 import hashlib
 import secrets
 import time
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from urllib.parse import parse_qs, urlparse
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+import qrcode
+from fastapi import APIRouter, Body, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response
+from qrcode.image.svg import SvgPathImage
 
 from gomoku import config
 from gomoku.core.enums import Player
@@ -37,6 +43,14 @@ class RoomAccessError(Exception):
 
 class RoomActionError(Exception):
     """Raised when a room action is invalid for its current state."""
+
+
+class RoomRateLimitError(Exception):
+    """Raised when one client creates rooms too frequently."""
+
+
+class RoomCapacityError(Exception):
+    """Raised when the in-memory room limit is reached."""
 
 
 def _token_hash(token: str) -> str:
@@ -69,14 +83,15 @@ class GameRoom:
     first_player: Player | None = None
     undo_requested_by: RoomRole | None = None
     rematch_requested_by: RoomRole | None = None
-    connections: dict[RoomRole, set[WebSocket]] = field(
+    connections: dict[RoomRole, WebSocket | None] = field(
         default_factory=lambda: {
-            RoomRole.OWNER: set(),
-            RoomRole.GUEST: set(),
+            RoomRole.OWNER: None,
+            RoomRole.GUEST: None,
         }
     )
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     last_activity: float = field(default_factory=time.monotonic)
+    paused_for_disconnect: bool = False
 
     @property
     def owner_player(self) -> Player | None:
@@ -121,6 +136,7 @@ class GameRoom:
                 "owner_connected": bool(self.connections[RoomRole.OWNER]),
                 "guest_connected": bool(self.connections[RoomRole.GUEST]),
             },
+            "paused_for_disconnect": self.paused_for_disconnect,
             "configuration": configuration,
             "undo_requested_by": (
                 self.undo_requested_by.value
@@ -139,23 +155,46 @@ class GameRoom:
 class RoomManager:
     """In-memory private rooms for two-player browser games."""
 
-    def __init__(self, room_ttl_seconds: int = config.ROOM_TTL_SECONDS) -> None:
+    def __init__(
+        self,
+        room_ttl_seconds: int = config.ROOM_TTL_SECONDS,
+        room_create_limit: int = config.ROOM_CREATE_LIMIT,
+        room_create_window_seconds: int = config.ROOM_CREATE_WINDOW_SECONDS,
+        max_active_rooms: int = config.MAX_ACTIVE_ROOMS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._rooms: dict[str, GameRoom] = {}
         self._lock = asyncio.Lock()
         self._room_ttl_seconds = room_ttl_seconds
+        self._room_create_limit = room_create_limit
+        self._room_create_window_seconds = room_create_window_seconds
+        self._max_active_rooms = max_active_rooms
+        self._clock = clock
+        self._room_creation_times: dict[str, deque[float]] = {}
 
-    async def create(self) -> CreatedRoom:
+    async def create(self, client_key: str = "anonymous") -> CreatedRoom:
         async with self._lock:
-            self._remove_expired_rooms()
+            now = self._clock()
+            self._remove_expired_rooms(now)
+            self._remove_expired_creation_records(now)
+            self._check_creation_limit(client_key, now)
+            if len(self._rooms) >= self._max_active_rooms:
+                raise RoomCapacityError("当前房间数量已达上限，请稍后再试。")
             room_id = self._new_room_id()
             owner_token = secrets.token_urlsafe(32)
             guest_token = secrets.token_urlsafe(32)
-            self._rooms[room_id] = GameRoom(
+            room = GameRoom(
                 room_id=room_id,
                 owner_token_hash=_token_hash(owner_token),
                 guest_token_hash=_token_hash(guest_token),
             )
+            room.last_activity = now
+            self._rooms[room_id] = room
             return CreatedRoom(room_id, owner_token, guest_token)
+
+    async def cleanup_expired_rooms(self) -> None:
+        async with self._lock:
+            self._remove_expired_rooms(self._clock())
 
     async def authorize(self, room_id: str, token: object) -> tuple[GameRoom, RoomRole]:
         if not isinstance(token, str) or not token:
@@ -176,16 +215,19 @@ class RoomManager:
         websocket: WebSocket,
         room_id: str,
         token: object,
-    ) -> tuple[GameRoom, RoomRole]:
+    ) -> tuple[GameRoom, RoomRole, WebSocket | None]:
         room, role = await self.authorize(room_id, token)
-        await websocket.accept()
         async with room.lock:
-            room.connections[role].add(websocket)
+            replaced_connection = room.connections[role]
+            room.connections[role] = websocket
             if role == RoomRole.GUEST and room.phase == RoomPhase.WAITING_FOR_GUEST:
                 room.phase = RoomPhase.WAITING_FOR_CONFIGURATION
-            room.last_activity = time.monotonic()
+            if room.paused_for_disconnect and self._both_players_connected(room):
+                room.game.start_timer()
+                room.paused_for_disconnect = False
+            room.last_activity = self._clock()
             await self._broadcast_locked(room)
-        return room, role
+        return room, role, replaced_connection
 
     async def disconnect(
         self,
@@ -194,8 +236,13 @@ class RoomManager:
         websocket: WebSocket,
     ) -> None:
         async with room.lock:
-            room.connections[role].discard(websocket)
-            room.last_activity = time.monotonic()
+            if room.connections[role] is not websocket:
+                return
+            room.connections[role] = None
+            if room.phase == RoomPhase.PLAYING and not self._both_players_connected(room):
+                room.game.pause_timer()
+                room.paused_for_disconnect = True
+            room.last_activity = self._clock()
             await self._broadcast_locked(room)
 
     async def perform(
@@ -214,7 +261,7 @@ class RoomManager:
         try:
             async with room.lock:
                 self._perform_locked(room, role, action, message)
-                room.last_activity = time.monotonic()
+                room.last_activity = self._clock()
                 await self._broadcast_locked(room)
         except RoomActionError as exc:
             return str(exc)
@@ -286,14 +333,19 @@ class RoomManager:
             or room.first_player is None
         ):
             raise RoomActionError("请先等待受邀者完成设置。")
+        if not self._both_players_connected(room):
+            raise RoomActionError("请等待双方在线后再开始对局。")
 
         room.game.reset(starting_player=room.first_player)
         room.game.start_timer()
         room.phase = RoomPhase.PLAYING
+        room.paused_for_disconnect = False
 
     def _make_move(self, room: GameRoom, role: RoomRole, message: dict) -> None:
         if room.phase != RoomPhase.PLAYING:
             raise RoomActionError("对局尚未开始。")
+        if room.paused_for_disconnect:
+            raise RoomActionError("对方暂时断线，对局已暂停。")
 
         player = room.player_for_role(role)
         if player is None or room.game.current_player != player:
@@ -318,6 +370,8 @@ class RoomManager:
     def _request_undo(self, room: GameRoom, role: RoomRole) -> None:
         if room.phase != RoomPhase.PLAYING or not room.game.move_history:
             raise RoomActionError("当前不能请求悔棋。")
+        if room.paused_for_disconnect:
+            raise RoomActionError("对方暂时断线，对局已暂停。")
         if room.undo_requested_by is not None:
             raise RoomActionError("已有待确认的悔棋请求。")
         room.undo_requested_by = role
@@ -325,6 +379,8 @@ class RoomManager:
     def _accept_undo(self, room: GameRoom, role: RoomRole) -> None:
         if room.undo_requested_by is None or room.undo_requested_by == role:
             raise RoomActionError("没有可确认的悔棋请求。")
+        if room.paused_for_disconnect:
+            raise RoomActionError("对方暂时断线，对局已暂停。")
         if not room.game.undo():
             raise RoomActionError("当前不能悔棋。")
         room.undo_requested_by = None
@@ -341,24 +397,29 @@ class RoomManager:
             raise RoomActionError("没有可确认的再来一局请求。")
         if room.first_player is None:
             raise RoomActionError("对局设置无效。")
+        if not self._both_players_connected(room):
+            raise RoomActionError("请等待双方重新连接后再开始。")
 
         room.game.reset(starting_player=room.first_player)
         room.game.start_timer()
         room.phase = RoomPhase.PLAYING
         room.undo_requested_by = None
         room.rematch_requested_by = None
+        room.paused_for_disconnect = False
 
     async def _broadcast_locked(self, room: GameRoom) -> None:
-        for role, sockets in room.connections.items():
+        for role, websocket in room.connections.items():
+            if websocket is None:
+                continue
             payload = {"type": "state", "state": room.state_for(role)}
-            disconnected: list[WebSocket] = []
-            for websocket in tuple(sockets):
-                try:
-                    await websocket.send_json(payload)
-                except (RuntimeError, WebSocketDisconnect):
-                    disconnected.append(websocket)
-            for websocket in disconnected:
-                sockets.discard(websocket)
+            try:
+                await websocket.send_json(payload)
+            except (RuntimeError, WebSocketDisconnect):
+                if room.connections[role] is websocket:
+                    room.connections[role] = None
+                    if room.phase == RoomPhase.PLAYING and not self._both_players_connected(room):
+                        room.game.pause_timer()
+                        room.paused_for_disconnect = True
 
     def _new_room_id(self) -> str:
         room_id = secrets.token_urlsafe(9)
@@ -366,12 +427,29 @@ class RoomManager:
             room_id = secrets.token_urlsafe(9)
         return room_id
 
-    def _remove_expired_rooms(self) -> None:
-        expiration = time.monotonic() - self._room_ttl_seconds
+    def _both_players_connected(self, room: GameRoom) -> bool:
+        return all(room.connections.values())
+
+    def _check_creation_limit(self, client_key: str, now: float) -> None:
+        recent_creations = self._room_creation_times.setdefault(client_key, deque())
+        if len(recent_creations) >= self._room_create_limit:
+            raise RoomRateLimitError("创建房间过于频繁，请稍后再试。")
+        recent_creations.append(now)
+
+    def _remove_expired_creation_records(self, now: float) -> None:
+        expiration = now - self._room_create_window_seconds
+        for client_key, recent_creations in tuple(self._room_creation_times.items()):
+            while recent_creations and recent_creations[0] <= expiration:
+                recent_creations.popleft()
+            if not recent_creations:
+                del self._room_creation_times[client_key]
+
+    def _remove_expired_rooms(self, now: float) -> None:
+        expiration = now - self._room_ttl_seconds
         expired_ids = [
             room_id
             for room_id, room in self._rooms.items()
-            if not room.connections and room.last_activity < expiration
+            if not any(room.connections.values()) and room.last_activity < expiration
         ]
         for room_id in expired_ids:
             del self._rooms[room_id]
@@ -380,12 +458,54 @@ class RoomManager:
 room_manager = RoomManager()
 
 
+def _client_key(request: Request) -> str:
+    for header_name in ("cf-connecting-ip", "x-forwarded-for"):
+        value = request.headers.get(header_name)
+        if value:
+            return value.split(",", maxsplit=1)[0].strip()
+    return request.client.host if request.client is not None else "unknown"
+
+
+def _invite_link_credentials(invite_url: object) -> tuple[str, str] | None:
+    if not isinstance(invite_url, str) or len(invite_url) > 1024:
+        return None
+
+    parsed = urlparse(invite_url)
+    path_segments = [segment for segment in parsed.path.split("/") if segment]
+    token = parse_qs(parsed.fragment).get("token", [None])[0]
+    if len(path_segments) != 2 or path_segments[0] != "room" or not token:
+        return None
+    return path_segments[1], token
+
+
+def _is_loopback_url(url: str) -> bool:
+    hostname = urlparse(url).hostname
+    return hostname in {"127.0.0.1", "localhost", "::1"}
+
+
 @router.post("/api/rooms", status_code=201)
 async def create_room(request: Request) -> dict:
-    created = await room_manager.create()
-    base_url = config.PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
-    owner_url = f"{base_url}/room/{created.room_id}?token={created.owner_token}"
-    invite_url = f"{base_url}/room/{created.room_id}?token={created.guest_token}"
+    request_base_url = str(request.base_url).rstrip("/")
+    if not config.PUBLIC_BASE_URL and _is_loopback_url(request_base_url):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": (
+                    "当前是本机地址，不能创建跨网房间。请使用 "
+                    "python gomoku/scripts/run_quick_tunnel.py 启动公网对战服务。"
+                )
+            },
+        )
+
+    try:
+        created = await room_manager.create(_client_key(request))
+    except RoomRateLimitError as exc:
+        return JSONResponse(status_code=429, content={"error": str(exc)})
+    except RoomCapacityError as exc:
+        return JSONResponse(status_code=503, content={"error": str(exc)})
+    base_url = config.PUBLIC_BASE_URL or request_base_url
+    owner_url = f"{base_url}/room/{created.room_id}#token={created.owner_token}"
+    invite_url = f"{base_url}/room/{created.room_id}#token={created.guest_token}"
     return {
         "room_id": created.room_id,
         "owner_url": owner_url,
@@ -393,14 +513,60 @@ async def create_room(request: Request) -> dict:
     }
 
 
+@router.post("/api/room-invite-qr")
+async def room_invite_qr(payload: dict = Body(...)) -> Response:
+    credentials = _invite_link_credentials(payload.get("invite_url"))
+    if credentials is None:
+        return JSONResponse(status_code=400, content={"error": "邀请链接无效。"})
+
+    room_id, token = credentials
+    try:
+        await room_manager.authorize(room_id, token)
+    except RoomAccessError:
+        return JSONResponse(status_code=404, content={"error": "邀请链接无效或已失效。"})
+
+    image = qrcode.make(payload["invite_url"], image_factory=SvgPathImage)
+    return Response(
+        content=image.to_string(encoding="unicode"),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.websocket("/ws/rooms/{room_id}")
 async def room_websocket(websocket: WebSocket, room_id: str) -> None:
-    token = websocket.query_params.get("token")
+    await websocket.accept()
     try:
-        room, role = await room_manager.connect(websocket, room_id, token)
+        authentication = await asyncio.wait_for(
+            websocket.receive_json(),
+            timeout=config.ROOM_AUTH_TIMEOUT_SECONDS,
+        )
+    except (asyncio.TimeoutError, ValueError, WebSocketDisconnect):
+        await websocket.close(code=1008)
+        return
+
+    if (
+        not isinstance(authentication, dict)
+        or authentication.get("type") != "authenticate"
+    ):
+        await websocket.close(code=1008)
+        return
+
+    try:
+        room, role, replaced_connection = await room_manager.connect(
+            websocket,
+            room_id,
+            authentication.get("token"),
+        )
     except RoomAccessError:
         await websocket.close(code=1008)
         return
+
+    if replaced_connection is not None:
+        try:
+            await replaced_connection.close(code=4001)
+        except (RuntimeError, WebSocketDisconnect):
+            pass
 
     try:
         while True:

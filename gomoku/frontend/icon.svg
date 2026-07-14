@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="五子棋">
+  <rect width="128" height="128" rx="28" fill="#d8a85c"/>
+  <path d="M24 32h80M24 52h80M24 72h80M24 92h80M32 24v80M52 24v80M72 24v80M92 24v80" fill="none" stroke="#4a321d" stroke-width="3"/>
+  <circle cx="52" cy="52" r="12" fill="#181818"/>
+  <circle cx="72" cy="72" r="12" fill="#f8f5ef" stroke="#4a321d" stroke-width="2"/>
+  <circle cx="92" cy="52" r="12" fill="#181818"/>
+  <circle cx="32" cy="72" r="12" fill="#f8f5ef" stroke="#4a321d" stroke-width="2"/>
+</svg>

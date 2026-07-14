@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from fastapi.testclient import TestClient
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
@@ -110,8 +111,34 @@ def test_create_private_room_returns_private_owner_and_invite_links() -> None:
     assert response["status"] == 201
     assert response["body"]["room_id"]
     assert "/room/" in response["body"]["owner_url"]
-    assert "token=" in response["body"]["owner_url"]
+    assert "#token=" in response["body"]["owner_url"]
+    assert "?token=" not in response["body"]["owner_url"]
     assert response["body"]["owner_url"] != response["body"]["invite_url"]
+
+
+def test_create_private_room_rejects_loopback_link_without_public_base_url() -> None:
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        response = client.post("/api/rooms")
+
+    assert response.status_code == 400
+    assert "run_quick_tunnel.py" in response.json()["error"]
+
+
+def test_api_docs_are_disabled_by_default() -> None:
+    response = request("GET", "/docs")
+
+    assert response["status"] == 404
+
+
+def test_pwa_assets_are_served() -> None:
+    with TestClient(app) as client:
+        manifest = client.get("/static/manifest.webmanifest")
+        service_worker = client.get("/sw.js")
+
+    assert manifest.status_code == 200
+    assert "私人五子棋" in manifest.text
+    assert service_worker.status_code == 200
+    assert "gomoku-shell-v0.1.4" in service_worker.text
 
 
 def test_move_returns_updated_state() -> None:

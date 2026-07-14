@@ -46,6 +46,17 @@ class GomokuGame:
         self._turn_started_at = self._clock()
         return True
 
+    def pause_timer(self) -> bool:
+        """Pause timing while preserving all accumulated thinking time."""
+
+        if not self.timer_running:
+            return False
+
+        self._settle_current_turn()
+        self.timer_running = False
+        self._turn_started_at = None
+        return True
+
     def make_move(self, row: int, col: int) -> dict:
         if self.game_over:
             raise GameOverError("Cannot make a move after the game is over.")

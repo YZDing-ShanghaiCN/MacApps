@@ -3,15 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gomoku</title>
+    <title>五子棋</title>
+    <meta name="theme-color" content="#2f6f67" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
     <main class="app-shell">
-      <section class="game-panel" aria-label="Gomoku board">
+      <section class="game-panel" aria-label="五子棋棋盘">
         <div class="top-bar">
           <div>
-            <h1>Gomoku</h1>
+            <h1>五子棋</h1>
             <p id="mode-status" class="mode-status">模式：双人对战</p>
             <p id="status" class="status">Loading...</p>
             <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
@@ -25,7 +28,7 @@
                 人机对战
               </button>
             </div>
-            <div class="difficulty-actions" role="group" aria-label="选择 AI 难度">
+            <div id="difficulty-actions" class="difficulty-actions" role="group" aria-label="选择 AI 难度">
               <button id="difficulty-simple-button" type="button" aria-pressed="true">
                 简单
               </button>
@@ -37,7 +40,6 @@
               </button>
             </div>
             <div class="actions">
-              <button id="create-room-button" type="button">创建私人房间</button>
               <button id="start-button" type="button">开始对局</button>
               <button id="undo-button" type="button">悔棋</button>
               <button id="reset-button" type="button">重新开始</button>
@@ -45,11 +47,33 @@
           </div>
         </div>
 
-        <div id="board" class="board" aria-label="15 by 15 Gomoku board"></div>
+        <section class="online-entry" aria-labelledby="online-entry-title">
+          <div>
+            <p class="eyebrow">跨网对战</p>
+            <h2 id="online-entry-title">和好友远程下棋</h2>
+            <p>创建私密房间后，复制链接或扫码邀请对方加入。</p>
+          </div>
+          <button id="create-room-button" class="primary-button" type="button">创建私人房间</button>
+        </section>
+
+        <p class="orientation-hint">横屏使用可获得更大的棋盘和更准确的落子体验。</p>
+        <div id="board" class="board" aria-label="15×15 五子棋棋盘"></div>
         <p id="message" class="message" role="status" aria-live="polite"></p>
       </section>
     </main>
 
+    <dialog id="game-result-dialog" class="result-dialog" aria-labelledby="result-title">
+      <button id="result-close-button" class="dialog-close" type="button" aria-label="关闭结果窗口">×</button>
+      <p class="eyebrow">本局结束</p>
+      <h2 id="result-title">对局结束</h2>
+      <p id="result-summary" class="status"></p>
+      <div class="actions dialog-actions">
+        <button id="result-primary-button" class="primary-button" type="button">再来一局</button>
+        <button id="result-secondary-button" type="button">查看棋盘</button>
+      </div>
+    </dialog>
+
+    <script src="/static/pwa.js"></script>
     <script src="/static/main.js"></script>
   </body>
 </html>
