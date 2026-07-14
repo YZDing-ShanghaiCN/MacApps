@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] - 2026-07-14
+
+- 验证并记录 Cloudflare Quick Tunnel 的临时跨网对战流程：分别运行本机服务和 Tunnel，使用随机 HTTPS 邀请地址在不同 WLAN 设备间对战。
+- 重构网络对战文档，区分临时 Quick Tunnel、同一 Wi-Fi 局域网和长期固定域名三种启动方式，并说明各自的访问边界。
+
 ## [0.1.1] - 2026-07-14
 
 - 新增固定公网地址的 Cloudflare Tunnel 启动器：Mac 与手机可通过同一 HTTPS/WSS 地址进行私人房间对战，无需处于同一 WLAN 或开放路由器端口。
