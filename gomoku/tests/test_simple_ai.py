@@ -96,6 +96,33 @@ def test_simple_ai_attacks_own_three_before_lower_defense() -> None:
     assert move in {(5, 4), (5, 8)}
 
 
+def test_simple_ai_prefers_an_open_own_three_over_a_single_ended_one() -> None:
+    board = Board()
+    board.place(3, 4, Player.BLACK)
+    for col in range(5, 8):
+        board.place(3, col, Player.WHITE)
+        board.place(7, col, Player.WHITE)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 4)
+
+
+def test_simple_ai_prefers_an_open_opponent_three_over_a_single_ended_one(
+    monkeypatch,
+) -> None:
+    board = Board()
+    board.place(3, 4, Player.WHITE)
+    for col in range(5, 8):
+        board.place(3, col, Player.BLACK)
+        board.place(7, col, Player.BLACK)
+
+    monkeypatch.setattr(
+        "gomoku.ai.simple_ai.random.choice",
+        lambda moves: moves[-1],
+    )
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 8)
+
+
 def test_simple_ai_blocks_immediate_loss_before_attacking_three() -> None:
     board = Board()
     for col in range(5, 8):

@@ -133,62 +133,64 @@ class SimpleAI:
         *,
         randomize_endpoint: bool = False,
     ) -> tuple[int, int] | None:
-        """Find a legal endpoint of the first matching maximal line.
+        """Find a legal endpoint of the best matching maximal line.
 
         A line is considered only when it consists of exactly ``line_length``
         adjacent stones. This deliberately excludes gapped shapes such as
         ``XX_X`` and longer lines. A line with no empty endpoint is dead and
-        cannot match this rule.
+        cannot match this rule. Among matching lines, a line with two legal
+        endpoints takes precedence over a line with only one legal endpoint.
         """
 
         if line_length < 2:
             return None
 
-        for dr, dc in DIRECTIONS:
-            for row in range(board.size):
-                for col in range(board.size):
-                    if board.grid[row][col] != int(player):
-                        continue
+        for endpoint_count in (2, 1):
+            for dr, dc in DIRECTIONS:
+                for row in range(board.size):
+                    for col in range(board.size):
+                        if board.grid[row][col] != int(player):
+                            continue
 
-                    before_row = row - dr
-                    before_col = col - dc
-                    if (
-                        board.is_inside(before_row, before_col)
-                        and board.grid[before_row][before_col] == int(player)
-                    ):
-                        continue
-
-                    end_row = row
-                    end_col = col
-                    current_length = 1
-                    while True:
-                        next_row = end_row + dr
-                        next_col = end_col + dc
+                        before_row = row - dr
+                        before_col = col - dc
                         if (
-                            not board.is_inside(next_row, next_col)
-                            or board.grid[next_row][next_col] != int(player)
+                            board.is_inside(before_row, before_col)
+                            and board.grid[before_row][before_col] == int(player)
                         ):
-                            break
-                        end_row = next_row
-                        end_col = next_col
-                        current_length += 1
+                            continue
 
-                    if current_length != line_length:
-                        continue
+                        end_row = row
+                        end_col = col
+                        current_length = 1
+                        while True:
+                            next_row = end_row + dr
+                            next_col = end_col + dc
+                            if (
+                                not board.is_inside(next_row, next_col)
+                                or board.grid[next_row][next_col] != int(player)
+                            ):
+                                break
+                            end_row = next_row
+                            end_col = next_col
+                            current_length += 1
 
-                    endpoints = [
-                        (candidate_row, candidate_col)
-                        for candidate_row, candidate_col in (
-                            (before_row, before_col),
-                            (end_row + dr, end_col + dc),
-                        )
-                        if board.is_empty(candidate_row, candidate_col)
-                    ]
-                    if not endpoints:
-                        continue
+                        if current_length != line_length:
+                            continue
 
-                    if randomize_endpoint:
-                        return random.choice(endpoints)
-                    return endpoints[0]
+                        endpoints = [
+                            (candidate_row, candidate_col)
+                            for candidate_row, candidate_col in (
+                                (before_row, before_col),
+                                (end_row + dr, end_col + dc),
+                            )
+                            if board.is_empty(candidate_row, candidate_col)
+                        ]
+                        if len(endpoints) != endpoint_count:
+                            continue
+
+                        if randomize_endpoint:
+                            return random.choice(endpoints)
+                        return endpoints[0]
 
         return None
