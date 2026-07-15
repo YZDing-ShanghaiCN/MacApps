@@ -14,11 +14,15 @@ DIRECTIONS = (
     (1, -1),
 )
 
-NEIGHBOR_DIRECTIONS = tuple(
-    (row_offset, col_offset)
-    for row_offset in (-1, 0, 1)
-    for col_offset in (-1, 0, 1)
-    if (row_offset, col_offset) != (0, 0)
+NEIGHBOR_DIRECTIONS = (
+    (0, -1),
+    (0, 1),
+    (-1, 0),
+    (1, 0),
+    (-1, -1),
+    (-1, 1),
+    (1, -1),
+    (1, 1),
 )
 
 
@@ -100,9 +104,10 @@ class SimpleAI:
         """Find the first legal square around an isolated stone.
 
         An isolated stone has no friendly stone in any of its eight adjacent
-        squares. Scanning the surrounding ring in a fixed order keeps this
-        low-priority strategy deterministic rather than selecting a random
-        move elsewhere on the board.
+        squares. Nearby squares are ordered by their distance to the board
+        center, then by horizontal, vertical, and diagonal directions. This
+        keeps the low-priority strategy deterministic rather than selecting a
+        random move elsewhere on the board.
         """
 
         for row in range(board.size):
@@ -117,13 +122,34 @@ class SimpleAI:
                 ):
                     continue
 
-                for row_offset, col_offset in NEIGHBOR_DIRECTIONS:
+                for row_offset, col_offset in self._ordered_neighbor_directions(
+                    board,
+                    row,
+                    col,
+                ):
                     candidate_row = row + row_offset
                     candidate_col = col + col_offset
                     if board.is_empty(candidate_row, candidate_col):
                         return candidate_row, candidate_col
 
         return None
+
+    def _ordered_neighbor_directions(
+        self,
+        board: Board,
+        row: int,
+        col: int,
+    ) -> tuple[tuple[int, int], ...]:
+        center = (board.size - 1) / 2
+        ordered_directions = sorted(
+            enumerate(NEIGHBOR_DIRECTIONS),
+            key=lambda item: (
+                (row + item[1][0] - center) ** 2
+                + (col + item[1][1] - center) ** 2,
+                item[0],
+            ),
+        )
+        return tuple(direction for _index, direction in ordered_directions)
 
     def _find_extension_move(
         self,
@@ -140,57 +166,81 @@ class SimpleAI:
         ``XX_X`` and longer lines. A line with no empty endpoint is dead and
         cannot match this rule. Among matching lines, a line with two legal
         endpoints takes precedence over a line with only one legal endpoint.
+        A move that is an endpoint for multiple matching lines takes
+        precedence within the same endpoint category.
         """
 
         if line_length < 2:
             return None
 
-        for endpoint_count in (2, 1):
-            for dr, dc in DIRECTIONS:
-                for row in range(board.size):
-                    for col in range(board.size):
-                        if board.grid[row][col] != int(player):
-                            continue
+        candidate_scores: dict[tuple[int, int], tuple[int, int]] = {}
+        for dr, dc in DIRECTIONS:
+            for row in range(board.size):
+                for col in range(board.size):
+                    if board.grid[row][col] != int(player):
+                        continue
 
-                        before_row = row - dr
-                        before_col = col - dc
+                    before_row = row - dr
+                    before_col = col - dc
+                    if (
+                        board.is_inside(before_row, before_col)
+                        and board.grid[before_row][before_col] == int(player)
+                    ):
+                        continue
+
+                    end_row = row
+                    end_col = col
+                    current_length = 1
+                    while True:
+                        next_row = end_row + dr
+                        next_col = end_col + dc
                         if (
-                            board.is_inside(before_row, before_col)
-                            and board.grid[before_row][before_col] == int(player)
+                            not board.is_inside(next_row, next_col)
+                            or board.grid[next_row][next_col] != int(player)
                         ):
-                            continue
+                            break
+                        end_row = next_row
+                        end_col = next_col
+                        current_length += 1
 
-                        end_row = row
-                        end_col = col
-                        current_length = 1
-                        while True:
-                            next_row = end_row + dr
-                            next_col = end_col + dc
-                            if (
-                                not board.is_inside(next_row, next_col)
-                                or board.grid[next_row][next_col] != int(player)
-                            ):
-                                break
-                            end_row = next_row
-                            end_col = next_col
-                            current_length += 1
+                    if current_length != line_length:
+                        continue
 
-                        if current_length != line_length:
-                            continue
+                    endpoints = [
+                        (candidate_row, candidate_col)
+                        for candidate_row, candidate_col in (
+                            (before_row, before_col),
+                            (end_row + dr, end_col + dc),
+                        )
+                        if board.is_empty(candidate_row, candidate_col)
+                    ]
+                    if not endpoints:
+                        continue
 
-                        endpoints = [
-                            (candidate_row, candidate_col)
-                            for candidate_row, candidate_col in (
-                                (before_row, before_col),
-                                (end_row + dr, end_col + dc),
-                            )
-                            if board.is_empty(candidate_row, candidate_col)
-                        ]
-                        if len(endpoints) != endpoint_count:
-                            continue
+                    for endpoint in endpoints:
+                        best_endpoint_count, matching_line_count = (
+                            candidate_scores.get(endpoint, (0, 0))
+                        )
+                        candidate_scores[endpoint] = (
+                            max(best_endpoint_count, len(endpoints)),
+                            matching_line_count + 1,
+                        )
 
-                        if randomize_endpoint:
-                            return random.choice(endpoints)
-                        return endpoints[0]
+        if not candidate_scores:
+            return None
 
-        return None
+        best_endpoint_count = max(score[0] for score in candidate_scores.values())
+        best_line_count = max(
+            score[1]
+            for score in candidate_scores.values()
+            if score[0] == best_endpoint_count
+        )
+        best_moves = [
+            move
+            for move, score in candidate_scores.items()
+            if score == (best_endpoint_count, best_line_count)
+        ]
+
+        if randomize_endpoint:
+            return random.choice(best_moves)
+        return best_moves[0]

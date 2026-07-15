@@ -46,7 +46,7 @@ def test_simple_ai_blocks_an_isolated_opponent_stone_from_its_neighbor_ring() ->
 
     move = SimpleAI().choose_move(board, Player.WHITE, (7, 7))
 
-    assert move == (6, 6)
+    assert move == (7, 6)
 
 
 def test_simple_ai_does_not_use_random_fallback_for_an_isolated_opponent_stone(
@@ -62,7 +62,7 @@ def test_simple_ai_does_not_use_random_fallback_for_an_isolated_opponent_stone(
 
     move = SimpleAI(Player.WHITE).choose_move(board, last_opponent_move=(7, 7))
 
-    assert move == (6, 6)
+    assert move == (7, 6)
 
 
 def test_simple_ai_grows_an_isolated_own_stone_before_blocking_an_opponent_one() -> None:
@@ -70,7 +70,14 @@ def test_simple_ai_grows_an_isolated_own_stone_before_blocking_an_opponent_one()
     board.place(7, 7, Player.WHITE)
     board.place(10, 10, Player.BLACK)
 
-    assert SimpleAI(Player.WHITE).choose_move(board) == (6, 6)
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 6)
+
+
+def test_simple_ai_prefers_a_single_neighbor_closer_to_the_board_center() -> None:
+    board = Board()
+    board.place(4, 4, Player.BLACK)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (5, 5)
 
 
 def test_simple_ai_ignores_non_isolated_stones_for_neighbor_ring_strategy() -> None:
@@ -121,6 +128,26 @@ def test_simple_ai_prefers_an_open_opponent_three_over_a_single_ended_one(
     )
 
     assert SimpleAI(Player.WHITE).choose_move(board) == (7, 8)
+
+
+def test_simple_ai_prefers_a_move_that_extends_two_own_threes() -> None:
+    board = Board()
+    for col in range(4, 7):
+        board.place(7, col, Player.WHITE)
+    for row in range(4, 7):
+        board.place(row, 7, Player.WHITE)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 7)
+
+
+def test_simple_ai_prefers_a_move_that_blocks_two_opponent_threes() -> None:
+    board = Board()
+    for col in range(4, 7):
+        board.place(7, col, Player.BLACK)
+    for row in range(4, 7):
+        board.place(row, 7, Player.BLACK)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 7)
 
 
 def test_simple_ai_blocks_immediate_loss_before_attacking_three() -> None:
