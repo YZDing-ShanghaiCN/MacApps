@@ -8,7 +8,9 @@
   --muted: #66615a;
   --accent: #2f6f67;
   --danger: #a23a32;
-  --cell-size: min(42px, calc((100vw - 56px) / 15));
+  --board-size: 15;
+  --board-span: 14;
+  --cell-size: min(42px, calc((100vw - 56px) / var(--board-span)));
 }
 
 * {
@@ -253,11 +255,9 @@ h1 {
 }
 
 .board {
-  width: calc(var(--cell-size) * 15 + 4px);
-  height: calc(var(--cell-size) * 15 + 4px);
-  display: grid;
-  grid-template-columns: repeat(15, var(--cell-size));
-  grid-template-rows: repeat(15, var(--cell-size));
+  position: relative;
+  width: calc(var(--cell-size) * var(--board-span) + 4px);
+  height: calc(var(--cell-size) * var(--board-span) + 4px);
   padding: 0;
   border: 2px solid var(--line);
   background-color: var(--board);
@@ -265,14 +265,16 @@ h1 {
     linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px);
   background-size: var(--cell-size) var(--cell-size);
-  background-position: calc(var(--cell-size) / 2) calc(var(--cell-size) / 2);
+  background-position: 0 0;
   box-shadow: 0 12px 28px rgb(74 50 29 / 18%);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
 .cell {
-  position: relative;
+  position: absolute;
+  top: calc(var(--row-index) * var(--cell-size));
+  left: calc(var(--col-index) * var(--cell-size));
   width: var(--cell-size);
   height: var(--cell-size);
   display: grid;
@@ -281,6 +283,23 @@ h1 {
   padding: 0;
   background: transparent;
   cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.cell::before,
+.cell::after,
+.stone {
+  grid-area: 1 / 1;
+}
+
+.cell.star-point::before {
+  content: "";
+  width: clamp(5px, 18%, 9px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--line);
+  box-shadow: 0 0 0 1px rgb(74 50 29 / 35%);
+  pointer-events: none;
 }
 
 .cell:disabled {
@@ -299,6 +318,7 @@ h1 {
   border-radius: 50%;
   opacity: 0.45;
   pointer-events: none;
+  z-index: 2;
 }
 
 .cell.preview-black:active::after {
@@ -324,6 +344,8 @@ h1 {
 }
 
 .stone {
+  position: relative;
+  z-index: 1;
   width: 72%;
   aspect-ratio: 1;
   border-radius: 50%;

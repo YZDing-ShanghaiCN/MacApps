@@ -67,6 +67,18 @@ def test_private_room_requires_a_valid_seat_token() -> None:
     asyncio.run(scenario())
 
 
+def test_private_rooms_use_the_same_fifteen_by_fifteen_board_as_pygame() -> None:
+    async def scenario() -> None:
+        manager = RoomManager()
+        created = await manager.create()
+        room, _role = await manager.authorize(created.room_id, created.owner_token)
+
+        assert room.game.board.size == 15
+        assert room.game.board.is_empty(14, 14)
+
+    asyncio.run(scenario())
+
+
 def test_guest_chooses_color_and_first_player_before_owner_starts() -> None:
     async def scenario() -> None:
         manager = RoomManager()

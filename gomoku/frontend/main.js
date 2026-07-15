@@ -30,6 +30,14 @@ const MODE_LABELS = {
   vs_ai: "人机对战",
 };
 
+const STAR_POINTS_BY_SIZE = {
+  15: new Set([
+    "3,3", "3,7", "3,11",
+    "7,3", "7,7", "7,11",
+    "11,3", "11,7", "11,11",
+  ]),
+};
+
 async function requestJson(url, options = {}) {
   const headers = {
     ...(options.headers || {}),
@@ -155,6 +163,11 @@ function updateTimer(state) {
 }
 
 function renderBoard(state) {
+  const boardSize = state.size || state.board.length;
+  const starPoints = STAR_POINTS_BY_SIZE[boardSize] || new Set();
+  boardElement.style.setProperty("--board-size", String(boardSize));
+  boardElement.style.setProperty("--board-span", String(Math.max(boardSize - 1, 1)));
+  boardElement.setAttribute("aria-label", `${boardSize}×${boardSize} 五子棋棋盘`);
   boardElement.innerHTML = "";
   const winningCells = new Set(
     (state.winning_line || []).map(({ row, col }) => `${row},${col}`),
@@ -170,6 +183,7 @@ function renderBoard(state) {
       button.type = "button";
       button.className = [
         "cell",
+        starPoints.has(`${rowIndex},${colIndex}`) ? "star-point" : "",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
         cell === 0 && state.timer_running && !state.game_over
@@ -178,6 +192,8 @@ function renderBoard(state) {
       ].filter(Boolean).join(" ");
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
+      button.style.setProperty("--row-index", String(rowIndex));
+      button.style.setProperty("--col-index", String(colIndex));
       button.disabled = state.game_over || !state.timer_running || cell !== 0;
       button.setAttribute("aria-label", `第 ${rowIndex + 1} 行，第 ${colIndex + 1} 列`);
 

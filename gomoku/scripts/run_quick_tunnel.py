@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -46,6 +47,22 @@ def local_port(value: str) -> int:
     if not 1 <= port <= 65535:
         raise ValueError("GOMOKU_PORT 必须是 1 到 65535 之间的整数。")
     return port
+
+
+def port_is_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.2)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def quick_tunnel_environment(environment: dict[str, str]) -> dict[str, str]:
+    """Remove Named Tunnel credentials that Quick Tunnel never needs."""
+
+    sanitized = environment.copy()
+    for name in tuple(sanitized):
+        if name.upper().endswith("TUNNEL_TOKEN"):
+            sanitized.pop(name)
+    return sanitized
 
 
 def wait_for_server(server: subprocess.Popen[object], port: int) -> None:
@@ -102,6 +119,17 @@ def main() -> int:
         print(f"配置错误：{error}", file=sys.stderr)
         return 2
 
+    if port_is_in_use(port):
+        print(
+            (
+                f"启动失败：本机端口 {port} 已被占用。请先在旧服务终端按 Ctrl+C，"
+                "或使用其他端口，例如：GOMOKU_PORT=8001 "
+                "python gomoku/scripts/run_quick_tunnel.py"
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
     cloudflared = shutil.which("cloudflared")
     if cloudflared is None:
         print("找不到 cloudflared。请先执行：brew install cloudflared", file=sys.stderr)
@@ -113,6 +141,7 @@ def main() -> int:
         tunnel = subprocess.Popen(
             quick_tunnel_command(cloudflared, port),
             cwd=PROJECT_ROOT,
+            env=quick_tunnel_environment(os.environ),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -132,7 +161,7 @@ def main() -> int:
                 raise RuntimeError("Cloudflare Quick Tunnel 启动失败。")
             raise RuntimeError("等待 Cloudflare 分配公网地址超时。")
 
-        environment = os.environ.copy()
+        environment = quick_tunnel_environment(os.environ)
         environment["GOMOKU_HOST"] = "127.0.0.1"
         environment["GOMOKU_PORT"] = str(port)
         environment["GOMOKU_PUBLIC_BASE_URL"] = public_url[0]

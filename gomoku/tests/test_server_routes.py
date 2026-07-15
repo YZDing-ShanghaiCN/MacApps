@@ -96,6 +96,12 @@ def test_state_contains_web_fields() -> None:
     }.issubset(response["body"])
     assert response["body"]["mode"] == config.MODE_LOCAL_2P
     assert response["body"]["ai_player"] is None
+    assert response["body"]["size"] == config.BOARD_SIZE
+    assert len(response["body"]["board"]) == config.BOARD_SIZE
+    assert all(
+        len(row) == config.BOARD_SIZE
+        for row in response["body"]["board"]
+    )
 
 
 def test_start_enables_cumulative_timer() -> None:
@@ -138,7 +144,7 @@ def test_pwa_assets_are_served() -> None:
     assert manifest.status_code == 200
     assert "私人五子棋" in manifest.text
     assert service_worker.status_code == 200
-    assert "gomoku-shell-v0.1.4" in service_worker.text
+    assert "gomoku-shell-v0.2.3" in service_worker.text
 
 
 def test_move_returns_updated_state() -> None:
@@ -147,6 +153,13 @@ def test_move_returns_updated_state() -> None:
     assert response["status"] == 200
     assert response["body"]["move_count"] == 1
     assert response["body"]["last_move"] == {"row": 7, "col": 7, "player": 1}
+
+
+def test_web_board_accepts_a_move_in_the_outermost_row_and_column() -> None:
+    response = request("POST", "/api/move", {"row": 14, "col": 14})
+
+    assert response["status"] == 200
+    assert response["body"]["board"][14][14] == 1
 
 
 def test_undo_returns_empty_state() -> None:

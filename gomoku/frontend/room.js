@@ -30,6 +30,14 @@ const resultCloseButton = document.querySelector("#result-close-button");
 const guestColorButtons = document.querySelectorAll("[data-guest-color]");
 const firstPlayerButtons = document.querySelectorAll("[data-first-player]");
 
+const STAR_POINTS_BY_SIZE = {
+  15: new Set([
+    "3,3", "3,7", "3,11",
+    "7,3", "7,7", "7,11",
+    "11,3", "11,7", "11,11",
+  ]),
+};
+
 const roomId = window.location.pathname.split("/").filter(Boolean).at(-1);
 const roomStorageKey = `gomoku.room.${roomId}.token`;
 const inviteStorageKey = `gomoku.room.${roomId}.invite_url`;
@@ -162,6 +170,11 @@ function updateConnectionState(state) {
 }
 
 function renderBoard(state) {
+  const boardSize = state.size || state.board.length;
+  const starPoints = STAR_POINTS_BY_SIZE[boardSize] || new Set();
+  boardElement.style.setProperty("--board-size", String(boardSize));
+  boardElement.style.setProperty("--board-span", String(Math.max(boardSize - 1, 1)));
+  boardElement.setAttribute("aria-label", `${boardSize}×${boardSize} 五子棋棋盘`);
   boardElement.innerHTML = "";
   const winningCells = new Set(
     (state.winning_line || []).map(({ row, col }) => `${row},${col}`),
@@ -179,12 +192,15 @@ function renderBoard(state) {
       button.type = "button";
       button.className = [
         "cell",
+        starPoints.has(`${rowIndex},${colIndex}`) ? "star-point" : "",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
         canMove ? (state.current_player === 1 ? "preview-black" : "preview-white") : "",
       ].filter(Boolean).join(" ");
       button.dataset.row = rowIndex;
       button.dataset.col = colIndex;
+      button.style.setProperty("--row-index", String(rowIndex));
+      button.style.setProperty("--col-index", String(colIndex));
       button.disabled = !canMove || cell !== 0;
       button.setAttribute("aria-label", `第 ${rowIndex + 1} 行，第 ${colIndex + 1} 列`);
 
