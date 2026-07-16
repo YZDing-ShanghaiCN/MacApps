@@ -31,6 +31,8 @@ def test_initial_state_serializes_black_turn() -> None:
     assert state["last_move"] is None
     assert state["mode"] == config.MODE_LOCAL_2P
     assert state["ai_player"] is None
+    assert state["ai_difficulty"] == config.AI_DIFFICULTY_SIMPLE
+    assert state["ai_thinking"] is False
 
 
 def test_move_count_changes_after_move() -> None:

@@ -12,6 +12,8 @@ from gomoku.server import routes
 
 def setup_function() -> None:
     routes.set_current_mode(config.MODE_LOCAL_2P)
+    routes.set_current_difficulty(config.AI_DIFFICULTY_SIMPLE)
+    routes.ai_thinking = False
     routes.game.reset()
 
 

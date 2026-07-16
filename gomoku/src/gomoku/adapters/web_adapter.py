@@ -33,6 +33,8 @@ def serialize_game_state(
     game: GomokuGame,
     mode: str = config.DEFAULT_MODE,
     ai_player: Player | int | None = None,
+    ai_difficulty: str = config.DEFAULT_AI_DIFFICULTY,
+    ai_thinking: bool = False,
 ) -> dict:
     """Return a JSON-friendly game state for the web API."""
 
@@ -52,6 +54,8 @@ def serialize_game_state(
         "last_move": serialize_last_move(game),
         "mode": mode,
         "ai_player": int(ai_player) if ai_player is not None else None,
+        "ai_difficulty": ai_difficulty,
+        "ai_thinking": ai_thinking,
     }
 
 
@@ -59,7 +63,15 @@ def game_to_response(
     game: GomokuGame,
     mode: str = config.DEFAULT_MODE,
     ai_player: Player | int | None = None,
+    ai_difficulty: str = config.DEFAULT_AI_DIFFICULTY,
+    ai_thinking: bool = False,
 ) -> dict:
     """Backward-compatible alias for older web API code."""
 
-    return serialize_game_state(game, mode=mode, ai_player=ai_player)
+    return serialize_game_state(
+        game,
+        mode=mode,
+        ai_player=ai_player,
+        ai_difficulty=ai_difficulty,
+        ai_thinking=ai_thinking,
+    )

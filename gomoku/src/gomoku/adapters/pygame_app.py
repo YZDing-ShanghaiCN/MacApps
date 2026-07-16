@@ -3,7 +3,7 @@ from __future__ import annotations
 import pygame
 
 from gomoku import config
-from gomoku.ai.simple_ai import SimpleAI
+from gomoku.ai.factory import create_ai
 from gomoku.core.enums import Player
 from gomoku.core.exceptions import GameOverError, InvalidMoveError
 from gomoku.core.game import GomokuGame
@@ -30,8 +30,8 @@ class PygameGomokuApp:
         self.game = GomokuGame(config.BOARD_SIZE)
         self.mode = config.DEFAULT_MODE
         self.ai_player = Player.WHITE
-        self.ai = SimpleAI(self.ai_player)
-        self.ai_difficulty = config.AI_DIFFICULTY_SIMPLE
+        self.ai_difficulty = config.DEFAULT_AI_DIFFICULTY
+        self.ai = create_ai(self.ai_difficulty, self.ai_player)
         self.message = ""
 
     def run(self) -> None:
@@ -78,12 +78,12 @@ class PygameGomokuApp:
             self.message = "Game over"
 
     def set_difficulty(self, difficulty: str) -> None:
-        if difficulty != config.AI_DIFFICULTY_SIMPLE:
-            self.message = "Normal and hard AI are coming soon"
+        if difficulty not in config.AVAILABLE_AI_DIFFICULTIES:
+            self.message = "Hard AI is coming soon"
             return
 
         self.ai_difficulty = difficulty
-        self.ai = SimpleAI(self.ai_player)
+        self.ai = create_ai(difficulty, self.ai_player)
         self.reset_game()
 
     def undo_move(self) -> None:
@@ -121,10 +121,22 @@ class PygameGomokuApp:
         if self.game.game_over or self.game.current_player != self.ai_player:
             return
 
-        move = self.ai.choose_move(
-            self.game.board,
-            last_opponent_move=last_opponent_move,
-        )
+        if self.ai_difficulty == config.AI_DIFFICULTY_NORMAL:
+            self.message = "Normal AI is thinking..."
+            self.draw()
+            pygame.display.flip()
+            pygame.event.pump()
+        try:
+            move = self.ai.choose_move(
+                self.game.board,
+                last_opponent_move=last_opponent_move,
+            )
+        finally:
+            # Synchronous search pauses event handling. Discard clicks made
+            # during that short pause so they cannot become an accidental
+            # second human move immediately after the AI returns.
+            pygame.event.clear(pygame.MOUSEBUTTONDOWN)
+            self.message = ""
         if move is None:
             return
 
@@ -268,7 +280,12 @@ class PygameGomokuApp:
             selected=ai_mode and self.ai_difficulty == config.AI_DIFFICULTY_SIMPLE,
             disabled=not ai_mode,
         )
-        self.draw_button(buttons["difficulty_normal"], "Normal (Soon)", disabled=True)
+        self.draw_button(
+            buttons["difficulty_normal"],
+            "Normal",
+            selected=ai_mode and self.ai_difficulty == config.AI_DIFFICULTY_NORMAL,
+            disabled=not ai_mode,
+        )
         self.draw_button(buttons["difficulty_hard"], "Hard (Soon)", disabled=True)
         self.draw_button(
             buttons["start"],
@@ -338,7 +355,8 @@ class PygameGomokuApp:
                 self.set_difficulty(config.AI_DIFFICULTY_SIMPLE)
             return True
         if buttons["difficulty_normal"].collidepoint(x, y):
-            self.set_difficulty(config.AI_DIFFICULTY_NORMAL)
+            if self.mode == config.MODE_VS_AI:
+                self.set_difficulty(config.AI_DIFFICULTY_NORMAL)
             return True
         if buttons["difficulty_hard"].collidepoint(x, y):
             self.set_difficulty(config.AI_DIFFICULTY_HARD)

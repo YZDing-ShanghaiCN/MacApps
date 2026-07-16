@@ -103,6 +103,14 @@ function friendlyErrorMessage(message) {
     return "模式无效";
   }
 
+  if (message.includes("difficulty must be")) {
+    return "AI 难度无效";
+  }
+
+  if (message.includes("currently thinking")) {
+    return "AI 正在思考，请稍候";
+  }
+
   return message || "操作失败，请重试";
 }
 
@@ -112,15 +120,28 @@ function updateMode(state) {
   modeLocalButton.setAttribute("aria-pressed", String(mode === "local_2p"));
   modeAiButton.setAttribute("aria-pressed", String(mode === "vs_ai"));
   const aiMode = mode === "vs_ai";
+  const difficulty = state.ai_difficulty || "simple";
+  const busy = requestInFlight || state.ai_thinking;
   difficultyActionsElement.hidden = !aiMode;
-  difficultySimpleButton.disabled = !aiMode;
-  difficultySimpleButton.setAttribute("aria-pressed", String(aiMode));
-  difficultyNormalButton.disabled = true;
+  difficultySimpleButton.disabled = !aiMode || busy;
+  difficultySimpleButton.setAttribute(
+    "aria-pressed",
+    String(aiMode && difficulty === "simple"),
+  );
+  difficultyNormalButton.disabled = !aiMode || busy;
+  difficultyNormalButton.setAttribute(
+    "aria-pressed",
+    String(aiMode && difficulty === "normal"),
+  );
   difficultyHardButton.disabled = true;
-  startButton.disabled = state.timer_running || state.game_over;
+  startButton.disabled = busy || state.timer_running || state.game_over;
 }
 
 function updateStatus(state) {
+  if (state.ai_thinking) {
+    statusElement.textContent = "普通 AI 思考中…";
+    return;
+  }
   if (state.winner_name) {
     statusElement.textContent = `${playerLabel(state.winner_name)}胜`;
     return;
@@ -186,7 +207,7 @@ function renderBoard(state) {
         starPoints.has(`${rowIndex},${colIndex}`) ? "star-point" : "",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
-        cell === 0 && state.timer_running && !state.game_over
+        cell === 0 && state.timer_running && !state.game_over && !requestInFlight && !state.ai_thinking
           ? (state.current_player === 1 ? "preview-black" : "preview-white")
           : "",
       ].filter(Boolean).join(" ");
@@ -194,7 +215,7 @@ function renderBoard(state) {
       button.dataset.col = colIndex;
       button.style.setProperty("--row-index", String(rowIndex));
       button.style.setProperty("--col-index", String(colIndex));
-      button.disabled = state.game_over || !state.timer_running || cell !== 0;
+      button.disabled = requestInFlight || state.ai_thinking || state.game_over || !state.timer_running || cell !== 0;
       button.setAttribute("aria-label", `第 ${rowIndex + 1} 行，第 ${colIndex + 1} 列`);
 
       if (cell !== 0) {
@@ -261,6 +282,10 @@ async function playMove(row, col) {
   }
 
   requestInFlight = true;
+  render(currentState);
+  if (currentState.mode === "vs_ai") {
+    setMessage(`${currentState.ai_difficulty === "normal" ? "普通" : "简单"} AI 思考中…`);
+  }
   try {
     const state = await requestJson("/api/move", {
       method: "POST",
@@ -272,6 +297,9 @@ async function playMove(row, col) {
     setMessage(friendlyErrorMessage(error.message));
   } finally {
     requestInFlight = false;
+    if (currentState) {
+      render(currentState);
+    }
   }
 }
 
@@ -337,6 +365,10 @@ boardElement.addEventListener("click", (event) => {
 });
 
 async function changeMode(mode) {
+  if (requestInFlight) {
+    return;
+  }
+  requestInFlight = true;
   try {
     const state = await requestJson("/api/mode", {
       method: "POST",
@@ -346,6 +378,33 @@ async function changeMode(mode) {
     setMessage("");
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    requestInFlight = false;
+    if (currentState) {
+      render(currentState);
+    }
+  }
+}
+
+async function changeDifficulty(difficulty) {
+  if (requestInFlight) {
+    return;
+  }
+  requestInFlight = true;
+  try {
+    const state = await requestJson("/api/difficulty", {
+      method: "POST",
+      body: JSON.stringify({ difficulty }),
+    });
+    render(state);
+    setMessage(`当前 AI 难度：${difficulty === "normal" ? "普通" : "简单"}`);
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    requestInFlight = false;
+    if (currentState) {
+      render(currentState);
+    }
   }
 }
 
@@ -358,7 +417,11 @@ modeAiButton.addEventListener("click", () => {
 });
 
 difficultySimpleButton.addEventListener("click", () => {
-  setMessage("当前 AI 难度：简单");
+  changeDifficulty("simple");
+});
+
+difficultyNormalButton.addEventListener("click", () => {
+  changeDifficulty("normal");
 });
 
 createRoomButton.addEventListener("click", () => {
