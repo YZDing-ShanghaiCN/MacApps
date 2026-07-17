@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from dataclasses import replace
 
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
@@ -44,3 +45,38 @@ def test_crossing_threat_receives_double_threat_bonus() -> None:
         single,
         Player.WHITE,
     ) + DEFAULT_NORMAL_AI_CONFIG.double_threat_bonus
+
+
+def test_defense_pattern_scores_can_be_tuned_independently() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.BLACK)
+    defense_scores = dict(DEFAULT_NORMAL_AI_CONFIG.defense_pattern_scores)
+    defense_scores["open_three"] *= 2
+    tuned_config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        defense_pattern_scores=defense_scores,
+    )
+    tuned = StaticEvaluator(tuned_config, PatternMatcher()).evaluate(
+        board,
+        Player.WHITE,
+    )
+    normal = evaluator().evaluate(board, Player.WHITE)
+    assert tuned < normal
+
+
+def test_center_bonus_decays_to_zero_in_late_game() -> None:
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        center_bonus_full_until_moves=1,
+        center_bonus_zero_after_moves=3,
+    )
+    static = StaticEvaluator(config, PatternMatcher())
+    early = Board()
+    early.place(7, 7, Player.WHITE)
+    late = Board()
+    late.place(7, 7, Player.WHITE)
+    late.place(0, 0, Player.BLACK)
+    late.place(0, 1, Player.BLACK)
+    assert static._position_score(early, Player.WHITE) > 0
+    assert static._position_score(late, Player.WHITE) == 0

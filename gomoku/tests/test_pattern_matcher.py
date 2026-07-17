@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+from collections import Counter
+from itertools import product
 
 import pytest
 
@@ -89,3 +91,26 @@ def test_open_and_closed_two_are_distinct() -> None:
 
     assert PatternKind.OPEN_TWO in kinds(open_board)
     assert PatternKind.CLOSED_TWO in kinds(closed_board)
+
+
+def test_all_seven_cell_lines_are_mirror_symmetric_and_deduplicated() -> None:
+    matcher = PatternMatcher(line_cache_capacity=10_000)
+    line = tuple((7, col) for col in range(4, 11))
+    for values in product((0, 1, 2), repeat=7):
+        board = Board()
+        for (row, col), value in zip(line, values):
+            board.grid[row][col] = value
+        patterns = matcher._deduplicate_and_suppress(
+            matcher._scan_line(board, line, (0, 1), Player.BLACK)
+        )
+
+        mirrored = Board()
+        for (row, col), value in zip(line, reversed(values)):
+            mirrored.grid[row][col] = value
+        mirrored_patterns = matcher._deduplicate_and_suppress(
+            matcher._scan_line(mirrored, line, (0, 1), Player.BLACK)
+        )
+        assert Counter(pattern.kind for pattern in patterns) == Counter(
+            pattern.kind for pattern in mirrored_patterns
+        )
+        assert len(patterns) == len({pattern.identity for pattern in patterns})

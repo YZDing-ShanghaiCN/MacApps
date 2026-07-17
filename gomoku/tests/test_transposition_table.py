@@ -37,3 +37,11 @@ def test_transposition_table_collision_uses_generation_then_depth() -> None:
     table.store(replacement)
     assert table.probe(1) is None
     assert table.probe(2) == replacement
+
+
+def test_set_associative_bucket_keeps_multiple_colliding_entries() -> None:
+    table = TranspositionTable(8, bucket_size=4)
+    entries = [make_entry(key, BoundType.EXACT) for key in (0, 2, 4, 6)]
+    for entry in entries:
+        table.store(entry)
+    assert [table.probe(entry.key) for entry in entries] == entries

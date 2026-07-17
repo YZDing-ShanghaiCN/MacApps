@@ -27,6 +27,7 @@ class SearchPosition(Board):
         grid: list[list[int]],
         current_player: Player | int,
         zobrist: ZobristTable,
+        max_candidate_radius: int = 2,
     ) -> None:
         size = len(grid)
         if size != zobrist.size or any(len(row) != size for row in grid):
@@ -38,6 +39,7 @@ class SearchPosition(Board):
         if self.current_player == Player.EMPTY:
             raise ValueError("SearchPosition requires a non-empty current player.")
         self.zobrist = zobrist
+        self.max_candidate_radius = max(1, max_candidate_radius)
         self.hash_key = zobrist.hash_grid(self.grid, self.current_player)
         self.move_stack: list[SearchMove] = []
         self.empty_count = sum(
@@ -45,6 +47,29 @@ class SearchPosition(Board):
             for row in self.grid
             for cell in row
         )
+        self.occupied: set[tuple[int, int]] = {
+            (row, col)
+            for row in range(self.size)
+            for col in range(self.size)
+            if self.grid[row][col] != int(Player.EMPTY)
+        }
+        self._neighbor_counts = {
+            radius: [[0 for _ in range(self.size)] for _ in range(self.size)]
+            for radius in range(1, self.max_candidate_radius + 1)
+        }
+        self._active_moves = {
+            radius: set() for radius in range(1, self.max_candidate_radius + 1)
+        }
+        for row, col in self.occupied:
+            self._update_neighbor_counts(row, col, 1)
+        for radius, counts in self._neighbor_counts.items():
+            self._active_moves[radius] = {
+                (row, col)
+                for row in range(self.size)
+                for col in range(self.size)
+                if self.grid[row][col] == int(Player.EMPTY)
+                and counts[row][col] > 0
+            }
 
     @classmethod
     def from_board(
@@ -52,8 +77,14 @@ class SearchPosition(Board):
         board: Board,
         current_player: Player | int,
         zobrist: ZobristTable,
+        max_candidate_radius: int = 2,
     ) -> "SearchPosition":
-        return cls(board.to_list(), current_player, zobrist)
+        return cls(
+            board.to_list(),
+            current_player,
+            zobrist,
+            max_candidate_radius=max_candidate_radius,
+        )
 
     @property
     def last_move(self) -> SearchMove | None:
@@ -68,6 +99,10 @@ class SearchPosition(Board):
         player = self.current_player
         previous_hash = self.hash_key
         self.grid[row][col] = int(player)
+        self.occupied.add((row, col))
+        for active in self._active_moves.values():
+            active.discard((row, col))
+        self._update_neighbor_counts(row, col, 1)
         self.hash_key ^= self.zobrist.piece_key(row, col, player)
         self.current_player = player.opponent
         self.hash_key ^= self.zobrist.side_to_move_key
@@ -81,6 +116,11 @@ class SearchPosition(Board):
         move = self.move_stack.pop()
         self.current_player = move.player
         self.grid[move.row][move.col] = int(Player.EMPTY)
+        self.occupied.remove((move.row, move.col))
+        self._update_neighbor_counts(move.row, move.col, -1)
+        for radius, counts in self._neighbor_counts.items():
+            if counts[move.row][move.col] > 0:
+                self._active_moves[radius].add((move.row, move.col))
         self.empty_count += 1
 
         # Perform the inverse XOR operations, then verify against the snapshot.
@@ -107,3 +147,31 @@ class SearchPosition(Board):
 
     def recompute_hash(self) -> int:
         return self.zobrist.hash_grid(self.grid, self.current_player)
+
+    def nearby_empty_moves(self, radius: int) -> set[tuple[int, int]]:
+        if not self.occupied:
+            center = self.size // 2
+            return {(center, center)} if self.is_empty(center, center) else set()
+        radius = max(1, min(radius, self.max_candidate_radius))
+        return set(self._active_moves[radius])
+
+    def _update_neighbor_counts(self, row: int, col: int, delta: int) -> None:
+        for radius, counts in self._neighbor_counts.items():
+            for candidate_row in range(
+                max(0, row - radius),
+                min(self.size, row + radius + 1),
+            ):
+                for candidate_col in range(
+                    max(0, col - radius),
+                    min(self.size, col + radius + 1),
+                ):
+                    before = counts[candidate_row][candidate_col]
+                    after = before + delta
+                    counts[candidate_row][candidate_col] = after
+                    move = (candidate_row, candidate_col)
+                    if self.grid[candidate_row][candidate_col] != int(Player.EMPTY):
+                        self._active_moves[radius].discard(move)
+                    elif before == 0 and after > 0:
+                        self._active_moves[radius].add(move)
+                    elif before > 0 and after == 0:
+                        self._active_moves[radius].discard(move)

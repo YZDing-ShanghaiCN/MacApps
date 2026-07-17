@@ -72,7 +72,7 @@ def test_completed_search_does_not_change_real_board() -> None:
 
 def test_timeout_discards_incomplete_depth_and_returns_last_complete_move() -> None:
     class ControlledAI(NormalAI):
-        def _search_root(self, position, depth):
+        def _search_root(self, position, depth, alpha=None, beta=None):
             if depth == 1:
                 return 10, (6, 6)
             raise SearchTimeout

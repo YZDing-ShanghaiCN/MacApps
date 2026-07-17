@@ -1,10 +1,10 @@
-const CACHE_NAME = "gomoku-shell-v0.3.0";
+const CACHE_NAME = "gomoku-shell-v0.3.1";
 const APP_SHELL = [
   "/",
-  "/static/style.css?v=0.3.0",
-  "/static/main.js?v=0.3.0",
-  "/static/room.js?v=0.3.0",
-  "/static/pwa.js?v=0.3.0",
+  "/static/style.css?v=0.3.1",
+  "/static/main.js?v=0.3.1",
+  "/static/room.js?v=0.3.1",
+  "/static/pwa.js?v=0.3.1",
   "/static/manifest.webmanifest",
   "/static/icon.svg",
 ];

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import queue
+import threading
+
 import pygame
 
 from gomoku import config
 from gomoku.ai.factory import create_ai
+from gomoku.ai.normal_ai import NormalAI
+from gomoku.core.board import Board
 from gomoku.core.enums import Player
 from gomoku.core.exceptions import GameOverError, InvalidMoveError
 from gomoku.core.game import GomokuGame
@@ -32,12 +37,19 @@ class PygameGomokuApp:
         self.ai_player = Player.WHITE
         self.ai_difficulty = config.DEFAULT_AI_DIFFICULTY
         self.ai = create_ai(self.ai_difficulty, self.ai_player)
+        self.ai_thinking = False
+        self._ai_generation = 0
+        self._ai_results: queue.Queue[tuple[int, tuple[int, int] | None, str | None]] = (
+            queue.Queue()
+        )
+        self._ai_cancel_event: threading.Event | None = None
         self.message = ""
 
     def run(self) -> None:
         running = True
         while running:
             running = self.handle_events()
+            self.poll_ai_result()
             self.draw()
             pygame.display.flip()
             self.clock.tick(config.FPS)
@@ -68,6 +80,7 @@ class PygameGomokuApp:
         self.reset_game()
 
     def reset_game(self) -> None:
+        self._cancel_pending_ai()
         self.game.reset()
         self.message = ""
 
@@ -87,6 +100,7 @@ class PygameGomokuApp:
         self.reset_game()
 
     def undo_move(self) -> None:
+        self._cancel_pending_ai()
         if self.mode == config.MODE_VS_AI:
             if self.game.undo() and self.game.current_player == self.ai_player:
                 self.game.undo()
@@ -101,7 +115,10 @@ class PygameGomokuApp:
             self.message = "Click Start to begin"
             return
 
-        if self.mode == config.MODE_VS_AI and self.game.current_player == self.ai_player:
+        if self.ai_thinking or (
+            self.mode == config.MODE_VS_AI
+            and self.game.current_player == self.ai_player
+        ):
             self.message = "AI turn"
             return
 
@@ -118,34 +135,85 @@ class PygameGomokuApp:
         if self.mode != config.MODE_VS_AI:
             return
 
-        if self.game.game_over or self.game.current_player != self.ai_player:
+        if (
+            self.ai_thinking
+            or self.game.game_over
+            or self.game.current_player != self.ai_player
+        ):
             return
 
-        if self.ai_difficulty == config.AI_DIFFICULTY_NORMAL:
-            self.message = "Normal AI is thinking..."
-            self.draw()
-            pygame.display.flip()
-            pygame.event.pump()
-        try:
-            move = self.ai.choose_move(
-                self.game.board,
-                last_opponent_move=last_opponent_move,
-            )
-        finally:
-            # Synchronous search pauses event handling. Discard clicks made
-            # during that short pause so they cannot become an accidental
-            # second human move immediately after the AI returns.
-            pygame.event.clear(pygame.MOUSEBUTTONDOWN)
-            self.message = ""
-        if move is None:
+        self.ai_thinking = True
+        self.message = "AI is thinking..."
+        self._ai_generation += 1
+        generation = self._ai_generation
+        selected_ai = self.ai
+        cancel_event = threading.Event()
+        self._ai_cancel_event = cancel_event
+        snapshot = Board(self.game.board.size)
+        snapshot.grid = self.game.board.to_list()
+
+        def worker() -> None:
+            try:
+                if isinstance(selected_ai, NormalAI):
+                    move = selected_ai.choose_move(
+                        snapshot,
+                        last_opponent_move=last_opponent_move,
+                        cancel_event=cancel_event,
+                    )
+                else:
+                    move = selected_ai.choose_move(
+                        snapshot,
+                        last_opponent_move=last_opponent_move,
+                    )
+                self._ai_results.put((generation, move, None))
+            except Exception as exc:  # Keep the Pygame loop alive on AI errors.
+                self._ai_results.put((generation, None, str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def poll_ai_result(self) -> None:
+        current_result = None
+        while True:
+            try:
+                result = self._ai_results.get_nowait()
+            except queue.Empty:
+                break
+            if result[0] == self._ai_generation:
+                current_result = result
+        if current_result is None:
             return
 
+        _generation, move, error = current_result
+        self.ai_thinking = False
+        self.message = ""
+        if error:
+            self.message = error
+            return
+        if (
+            move is None
+            or self.mode != config.MODE_VS_AI
+            or self.game.game_over
+            or self.game.current_player != self.ai_player
+        ):
+            return
         try:
             self.game.make_move(*move)
         except InvalidMoveError as exc:
             self.message = str(exc)
         except GameOverError:
             self.message = "Game over"
+
+    def _cancel_pending_ai(self) -> None:
+        if self._ai_cancel_event is not None:
+            self._ai_cancel_event.set()
+            self._ai_cancel_event = None
+        self._ai_generation += 1
+        self.ai_thinking = False
+        while True:
+            try:
+                self._ai_results.get_nowait()
+            except queue.Empty:
+                break
 
     def pixel_to_cell(self, x: int, y: int) -> tuple[int, int] | None:
         col = round((x - config.MARGIN) / config.CELL_SIZE)
@@ -301,6 +369,9 @@ class PygameGomokuApp:
         elif self.game.game_over:
             status = "Draw"
             color = config.WIN_COLOR
+        elif self.ai_thinking:
+            status = "AI is thinking..."
+            color = config.TEXT_COLOR
         elif not self.game.timer_running:
             status = "Ready: click Start Game"
             color = config.TEXT_COLOR

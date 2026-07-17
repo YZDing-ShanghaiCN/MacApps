@@ -38,8 +38,8 @@ class StaticEvaluator:
             timeout_check,
         )
 
-        own_score = self._pattern_score(own_patterns)
-        opponent_score = self._pattern_score(opponent_patterns)
+        own_score = self._pattern_score(own_patterns, defensive=False)
+        opponent_score = self._pattern_score(opponent_patterns, defensive=True)
         own_score += self._multiple_threat_score(own_patterns)
         opponent_score += self._multiple_threat_score(opponent_patterns)
 
@@ -55,24 +55,55 @@ class StaticEvaluator:
         ceiling = self.config.evaluation_ceiling
         return max(-ceiling, min(ceiling, value))
 
-    def _pattern_score(self, patterns: tuple[Pattern, ...]) -> int:
-        return sum(self.config.pattern_scores[pattern.kind.value] for pattern in patterns)
+    def _pattern_score(
+        self,
+        patterns: tuple[Pattern, ...],
+        *,
+        defensive: bool,
+    ) -> int:
+        scores = (
+            self.config.defense_pattern_scores
+            if defensive
+            else self.config.pattern_scores
+        )
+        return sum(scores[pattern.kind.value] for pattern in patterns)
 
     def _multiple_threat_score(self, patterns: tuple[Pattern, ...]) -> int:
-        directions = {
-            pattern.direction
+        threats = {
+            (
+                pattern.direction,
+                pattern.stones,
+                pattern.key_empties,
+            )
             for pattern in patterns
             if pattern.kind in THREAT_KINDS
         }
-        return max(0, len(directions) - 1) * self.config.double_threat_bonus
+        return max(0, len(threats) - 1) * self.config.double_threat_bonus
 
     def _position_score(self, board: Board, player: Player) -> int:
         center = (board.size - 1) / 2
+        occupied_count = board.size * board.size - sum(
+            cell == int(Player.EMPTY)
+            for row in board.grid
+            for cell in row
+        )
+        full_until = self.config.center_bonus_full_until_moves
+        zero_after = max(full_until + 1, self.config.center_bonus_zero_after_moves)
+        if occupied_count <= full_until:
+            phase_factor = 1.0
+        elif occupied_count >= zero_after:
+            phase_factor = 0.0
+        else:
+            phase_factor = (zero_after - occupied_count) / (zero_after - full_until)
         score = 0
         for row in range(board.size):
             for col in range(board.size):
                 if board.grid[row][col] != int(player):
                     continue
                 distance = max(abs(row - center), abs(col - center))
-                score += int((center + 1 - distance) * self.config.center_bonus)
+                score += int(
+                    (center + 1 - distance)
+                    * self.config.center_bonus
+                    * phase_factor
+                )
         return score

@@ -11,9 +11,9 @@ from gomoku.config import BOARD_SIZE
 DEFAULT_PATTERN_SCORES = {
     "five": 100_000_000,
     "open_four": 1_000_000,
-    "closed_four": 100_000,
+    "closed_four": 25_000,
     "open_three": 20_000,
-    "jump_three": 20_000,
+    "jump_three": 15_000,
     "closed_three": 3_000,
     "open_two": 500,
     "closed_two": 80,
@@ -36,10 +36,20 @@ class NormalAIConfig:
     root_max_quiet_candidates: int = 20
     inner_max_quiet_candidates: int = 12
     transposition_capacity: int = 200_000
+    transposition_bucket_size: int = 4
     threat_extension_depth: int = 2
     timeout_check_interval_nodes: int = 32
     zobrist_seed: int = 0x5A17_2026
     enable_alpha_beta: bool = True
+    enable_pvs: bool = True
+    aspiration_window: int = 50_000
+    max_nodes: int | None = None
+    evaluation_cache_capacity: int = 50_000
+    pattern_line_cache_capacity: int = 100_000
+
+    enable_vcf: bool = True
+    vcf_max_depth: int = 8
+    vcf_time_fraction: float = 0.18
 
     mate_score: int = 1_000_000_000
     infinity_score: int = 2_000_000_000
@@ -48,8 +58,13 @@ class NormalAIConfig:
     attack_factor: float = 1.0
     defense_factor: float = 1.05
     center_bonus: int = 12
+    center_bonus_full_until_moves: int = 10
+    center_bonus_zero_after_moves: int = 36
     double_threat_bonus: int = 50_000
     pattern_scores: Mapping[str, int] = field(
+        default_factory=lambda: dict(DEFAULT_PATTERN_SCORES)
+    )
+    defense_pattern_scores: Mapping[str, int] = field(
         default_factory=lambda: dict(DEFAULT_PATTERN_SCORES)
     )
 
@@ -62,6 +77,9 @@ class NormalAIConfig:
     open_three_order: int = 4_000_000
     block_open_three_order: int = 3_000_000
     local_pattern_order_scale: int = 100
+    history_bonus: int = 64
+    history_max: int = 1_000_000
+    killer_move_bonus: int = 2_000_000
 
 
 DEFAULT_NORMAL_AI_CONFIG = NormalAIConfig()

@@ -23,7 +23,16 @@ const resultCloseButton = document.querySelector("#result-close-button");
 let currentState = null;
 let stateReceivedAt = 0;
 let requestInFlight = false;
+let aiPollInFlight = false;
 let displayedResultKey = null;
+
+const LOCAL_SESSION_STORAGE_KEY = "gomoku.local.session_id";
+let localSessionId = localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
+if (!localSessionId) {
+  localSessionId = globalThis.crypto?.randomUUID?.() ||
+    `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, localSessionId);
+}
 
 const MODE_LABELS = {
   local_2p: "双人对战",
@@ -40,6 +49,7 @@ const STAR_POINTS_BY_SIZE = {
 
 async function requestJson(url, options = {}) {
   const headers = {
+    "X-Gomoku-Session": localSessionId,
     ...(options.headers || {}),
   };
 
@@ -276,6 +286,25 @@ async function loadState() {
   }
 }
 
+async function pollAiState() {
+  if (aiPollInFlight || !currentState?.ai_thinking) {
+    return;
+  }
+  aiPollInFlight = true;
+  try {
+    const wasThinking = currentState.ai_thinking;
+    const state = await requestJson("/api/state");
+    render(state);
+    if (wasThinking && !state.ai_thinking) {
+      setMessage(state.ai_error ? friendlyErrorMessage(state.ai_error) : "");
+    }
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    aiPollInFlight = false;
+  }
+}
+
 async function playMove(row, col) {
   if (requestInFlight) {
     return;
@@ -474,5 +503,6 @@ loadState();
 window.setInterval(() => {
   if (currentState) {
     updateTimer(currentState);
+    pollAiState();
   }
 }, 250);

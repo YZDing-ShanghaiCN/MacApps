@@ -53,6 +53,7 @@ class CandidateGenerator:
         tt_move: Move | None = None,
         forcing_only: bool = False,
         timeout_check: Callable[[], None] | None = None,
+        ordering_bonus: Callable[[Move], int] | None = None,
     ) -> list[Move]:
         player = position.current_player
         opponent = player.opponent
@@ -99,6 +100,8 @@ class CandidateGenerator:
                 move in key_moves,
                 timeout_check,
             )
+            if ordering_bonus is not None:
+                priority += ordering_bonus(move)
             if forcing_only and not tactical:
                 continue
             ranked.append(
@@ -158,18 +161,18 @@ class CandidateGenerator:
         )
         own_kinds = {pattern.kind for pattern in own_patterns}
         opponent_kinds = {pattern.kind for pattern in opponent_patterns}
-        own_threat_directions = {
-            pattern.direction
+        own_threats = {
+            (pattern.direction, pattern.stones, pattern.key_empties)
             for pattern in own_patterns
             if pattern.kind in TACTICAL_KINDS
         }
-        opponent_threat_directions = {
-            pattern.direction
+        opponent_threats = {
+            (pattern.direction, pattern.stones, pattern.key_empties)
             for pattern in opponent_patterns
             if pattern.kind in TACTICAL_KINDS
         }
 
-        if len(own_threat_directions) >= 2 or len(opponent_threat_directions) >= 2:
+        if len(own_threats) >= 2 or len(opponent_threats) >= 2:
             base = self.config.double_threat_order
             tactical = True
         elif PatternKind.OPEN_FOUR in own_kinds:
@@ -223,23 +226,7 @@ class CandidateGenerator:
         position: SearchPosition,
         radius: int,
     ) -> set[Move]:
-        occupied = [
-            (row, col)
-            for row in range(position.size)
-            for col in range(position.size)
-            if position.grid[row][col] != int(Player.EMPTY)
-        ]
-        if not occupied:
-            center = position.size // 2
-            return {(center, center)} if position.is_empty(center, center) else set()
-
-        moves: set[Move] = set()
-        for row, col in occupied:
-            for candidate_row in range(max(0, row - radius), min(position.size, row + radius + 1)):
-                for candidate_col in range(max(0, col - radius), min(position.size, col + radius + 1)):
-                    if position.is_empty(candidate_row, candidate_col):
-                        moves.add((candidate_row, candidate_col))
-        return moves
+        return position.nearby_empty_moves(radius)
 
     def _sort_by_center(
         self,

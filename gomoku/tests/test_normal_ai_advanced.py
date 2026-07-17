@@ -1,0 +1,130 @@
+from dataclasses import replace
+from pathlib import Path
+import sys
+
+
+SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC_DIR))
+
+from gomoku.ai.normal_ai import NormalAI
+from gomoku.ai.normal_ai_config import DEFAULT_NORMAL_AI_CONFIG
+from gomoku.ai.search_position import SearchPosition
+from gomoku.ai.zobrist import ZobristTable
+from gomoku.core.board import Board
+from gomoku.core.enums import Player
+
+
+def make_position(board: Board, player=Player.WHITE) -> SearchPosition:
+    return SearchPosition.from_board(
+        board,
+        player,
+        ZobristTable(board.size, 404),
+    )
+
+
+def test_optional_quiescence_moves_keep_stand_pat_available() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.WHITE)
+    ai = NormalAI(Player.WHITE)
+    position = make_position(board)
+    ai._deadline = float("inf")
+    stand_pat = ai._evaluate(position)
+
+    score = ai._quiescence(
+        position,
+        -ai.config.infinity_score,
+        ai.config.infinity_score,
+        ply=0,
+        color=1,
+        extension_depth=2,
+        tt_move=None,
+    )
+    assert score >= stand_pat
+    assert position.grid == board.grid
+
+
+def test_fixed_node_budget_is_reproducible() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        time_limit_ms=10_000,
+        max_nodes=120,
+        max_depth=6,
+        enable_vcf=False,
+    )
+    first = NormalAI(Player.WHITE, config=config)
+    second = NormalAI(Player.WHITE, config=config)
+    assert first.choose_move(board) == second.choose_move(board)
+    assert first.last_search_stats.nodes <= 121
+    assert first.last_search_stats.timed_out is True
+
+
+def test_pvs_and_aspiration_match_full_window_search() -> None:
+    board = Board()
+    for row, col, player in (
+        (7, 7, Player.BLACK),
+        (7, 8, Player.WHITE),
+        (8, 8, Player.BLACK),
+    ):
+        board.place(row, col, player)
+    common = dict(
+        time_limit_ms=10_000,
+        max_depth=2,
+        threat_extension_depth=0,
+        enable_vcf=False,
+        root_max_quiet_candidates=5,
+        inner_max_quiet_candidates=5,
+    )
+    optimized = NormalAI(
+        Player.WHITE,
+        config=replace(DEFAULT_NORMAL_AI_CONFIG, **common),
+    )
+    baseline = NormalAI(
+        Player.WHITE,
+        config=replace(
+            DEFAULT_NORMAL_AI_CONFIG,
+            **common,
+            enable_pvs=False,
+            aspiration_window=0,
+        ),
+    )
+    assert optimized.choose_move(board) == baseline.choose_move(board)
+
+
+def test_evaluation_cache_and_search_report_are_populated() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        time_limit_ms=10_000,
+        max_depth=1,
+        threat_extension_depth=0,
+        enable_vcf=False,
+    )
+    ai = NormalAI(Player.WHITE, config=config)
+    ai.choose_move(board)
+    stats = ai.last_search_stats
+    assert stats.depth_results[-1].depth == 1
+    assert stats.root_moves
+    assert stats.max_ply >= 1
+
+
+def test_vcf_finds_open_four_creation_without_mutating_board() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.WHITE)
+    board.place(6, 6, Player.BLACK)
+    before = board.to_list()
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        time_limit_ms=10_000,
+        vcf_time_fraction=0.5,
+    )
+    ai = NormalAI(Player.WHITE, config=config)
+    move = ai.choose_move(board)
+    assert move in {(7, 4), (7, 8)}
+    assert ai.last_search_stats.vcf_found is True
+    assert ai.last_search_stats.vcf_nodes > 0
+    assert board.to_list() == before

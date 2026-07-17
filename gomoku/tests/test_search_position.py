@@ -46,3 +46,20 @@ def test_fixed_zobrist_seed_is_reproducible() -> None:
 
     assert first.hash_key == second.hash_key
     assert first.zobrist.side_to_move_key == second.zobrist.side_to_move_key
+
+
+def test_incremental_candidate_neighborhood_restores_after_long_undo() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    position = SearchPosition.from_board(
+        board,
+        Player.WHITE,
+        ZobristTable(15, 22),
+    )
+    original = position.nearby_empty_moves(2)
+    for move in ((7, 8), (6, 8), (8, 8), (6, 7)):
+        position.make_move(*move)
+    for _ in range(4):
+        position.undo_move()
+    assert position.nearby_empty_moves(2) == original
+    assert position.hash_key == position.recompute_hash()

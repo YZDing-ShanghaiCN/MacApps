@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import time
 
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
@@ -13,14 +14,22 @@ from gomoku.server import routes
 def setup_function() -> None:
     routes.set_current_mode(config.MODE_LOCAL_2P)
     routes.set_current_difficulty(config.AI_DIFFICULTY_SIMPLE)
-    routes.ai_thinking = False
+    routes.cancel_pending_ai()
     routes.game.reset()
+
+
+def wait_for_ai() -> dict:
+    deadline = time.monotonic() + 2
+    while routes.default_session.ai_thinking and time.monotonic() < deadline:
+        time.sleep(0.005)
+    return routes.state_response()
 
 
 def test_vs_ai_move_triggers_ai_response() -> None:
     routes.set_current_mode(config.MODE_VS_AI)
 
-    state = routes.make_move({"row": 7, "col": 7})
+    routes.make_move({"row": 7, "col": 7})
+    state = wait_for_ai()
 
     assert state["mode"] == config.MODE_VS_AI
     assert state["ai_player"] == int(Player.WHITE)
@@ -33,7 +42,8 @@ def test_vs_ai_move_triggers_ai_response() -> None:
 def test_vs_ai_move_count_increases_by_two_unless_game_ends() -> None:
     routes.set_current_mode(config.MODE_VS_AI)
 
-    state = routes.make_move({"row": 7, "col": 7})
+    routes.make_move({"row": 7, "col": 7})
+    state = wait_for_ai()
 
     if state["winner"] is None:
         assert state["move_count"] >= 2
@@ -42,6 +52,7 @@ def test_vs_ai_move_count_increases_by_two_unless_game_ends() -> None:
 def test_vs_ai_undo_reverts_player_and_ai_moves() -> None:
     routes.set_current_mode(config.MODE_VS_AI)
     routes.make_move({"row": 7, "col": 7})
+    wait_for_ai()
 
     state = routes.undo_move()
 

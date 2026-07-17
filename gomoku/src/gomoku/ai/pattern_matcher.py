@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from collections.abc import Callable, Iterable
 
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
@@ -56,6 +57,10 @@ class Pattern:
 
 class PatternMatcher:
     """Find tactical shapes without counting overlapping windows twice."""
+
+    def __init__(self, line_cache_capacity: int = 0) -> None:
+        self.line_cache_capacity = max(0, line_cache_capacity)
+        self._line_cache: OrderedDict[tuple, tuple[Pattern, ...]] = OrderedDict()
 
     def find_patterns(
         self,
@@ -149,7 +154,13 @@ class PatternMatcher:
     ) -> list[Pattern]:
         own = int(player)
         values = [board.grid[row][col] for row, col in line]
+        cache_key = (direction, line, own, tuple(values))
+        cached = self._line_cache.get(cache_key)
+        if cached is not None:
+            self._line_cache.move_to_end(cache_key)
+            return list(cached)
         if values.count(own) < 2:
+            self._remember_line(cache_key, ())
             return []
         patterns: list[Pattern] = []
 
@@ -249,7 +260,20 @@ class PatternMatcher:
                     frozenset(line[index] for index in window_empty_indexes),
                 )
             )
+        self._remember_line(cache_key, tuple(patterns))
         return patterns
+
+    def _remember_line(
+        self,
+        key: tuple,
+        patterns: tuple[Pattern, ...],
+    ) -> None:
+        if self.line_cache_capacity <= 0:
+            return
+        self._line_cache[key] = patterns
+        self._line_cache.move_to_end(key)
+        while len(self._line_cache) > self.line_cache_capacity:
+            self._line_cache.popitem(last=False)
 
     def _groups_with_counts(
         self,
