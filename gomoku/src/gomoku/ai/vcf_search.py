@@ -38,6 +38,69 @@ class VCFSearch:
         timeout_check: Callable[[], None],
     ) -> Move | None:
         self.nodes = 0
+        return self._find_winning_move(position, attacker, timeout_check)
+
+    def find_defensive_moves(
+        self,
+        position: SearchPosition,
+        defender: Player,
+        timeout_check: Callable[[], None],
+    ) -> tuple[bool, tuple[Move, ...]]:
+        """Return whether the opponent has VCF and moves that break the proof."""
+
+        self.nodes = 0
+        if position.current_player != defender:
+            return False, ()
+        attacker = defender.opponent
+        position.toggle_side_to_move()
+        try:
+            attacker_move = self._find_winning_move(
+                position,
+                attacker,
+                timeout_check,
+            )
+        finally:
+            position.toggle_side_to_move()
+        if attacker_move is None:
+            return False, ()
+
+        defenses = self.candidates.generate(
+            position,
+            root=True,
+            timeout_check=timeout_check,
+        )
+        limit = max(0, self.config.vcf_defense_max_candidates)
+        safe_moves: list[Move] = []
+        for move in defenses[:limit]:
+            timeout_check()
+            position.make_move(*move)
+            try:
+                last = position.last_move
+                if last is not None and check_win(
+                    position,
+                    last.row,
+                    last.col,
+                    last.player,
+                ):
+                    safe_moves.append(move)
+                    continue
+                continuation = self._find_winning_move(
+                    position,
+                    attacker,
+                    timeout_check,
+                )
+                if continuation is None:
+                    safe_moves.append(move)
+            finally:
+                position.undo_move()
+        return True, tuple(safe_moves)
+
+    def _find_winning_move(
+        self,
+        position: SearchPosition,
+        attacker: Player,
+        timeout_check: Callable[[], None],
+    ) -> Move | None:
         self._failed.clear()
         if position.current_player != attacker:
             return None

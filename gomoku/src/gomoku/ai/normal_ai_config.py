@@ -50,6 +50,9 @@ class NormalAIConfig:
     enable_vcf: bool = True
     vcf_max_depth: int = 8
     vcf_time_fraction: float = 0.18
+    enable_defensive_vcf: bool = True
+    defensive_vcf_time_fraction: float = 0.12
+    vcf_defense_max_candidates: int = 16
 
     mate_score: int = 1_000_000_000
     infinity_score: int = 2_000_000_000

@@ -9,6 +9,8 @@ sys.path.insert(0, str(SRC_DIR))
 from gomoku.ai.evaluator import StaticEvaluator
 from gomoku.ai.normal_ai_config import DEFAULT_NORMAL_AI_CONFIG
 from gomoku.ai.pattern_matcher import PatternMatcher
+from gomoku.ai.search_position import SearchPosition
+from gomoku.ai.zobrist import ZobristTable
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
 
@@ -80,3 +82,43 @@ def test_center_bonus_decays_to_zero_in_late_game() -> None:
     late.place(0, 1, Player.BLACK)
     assert static._position_score(early, Player.WHITE) > 0
     assert static._position_score(late, Player.WHITE) == 0
+
+
+def test_incremental_evaluation_matches_full_scan_and_restores_after_undo() -> None:
+    board = Board()
+    for row, col, player in (
+        (7, 7, Player.BLACK),
+        (7, 8, Player.WHITE),
+        (8, 8, Player.BLACK),
+        (6, 6, Player.WHITE),
+    ):
+        board.place(row, col, player)
+    position = SearchPosition.from_board(
+        board,
+        Player.BLACK,
+        ZobristTable(board.size, 303),
+    )
+    incremental = StaticEvaluator(DEFAULT_NORMAL_AI_CONFIG, PatternMatcher())
+    incremental.prepare(position)
+    full_scan = StaticEvaluator(DEFAULT_NORMAL_AI_CONFIG, PatternMatcher())
+    original_scores = {
+        player: incremental.evaluate(position, player)
+        for player in (Player.BLACK, Player.WHITE)
+    }
+
+    for move in ((8, 7), (6, 8), (9, 7), (5, 8)):
+        position.make_move(*move)
+        for player in (Player.BLACK, Player.WHITE):
+            assert incremental.evaluate(position, player) == full_scan.evaluate(
+                position,
+                player,
+            )
+
+    for _ in range(4):
+        position.undo_move()
+
+    assert {
+        player: incremental.evaluate(position, player)
+        for player in (Player.BLACK, Player.WHITE)
+    } == original_scores
+    assert position.grid == board.grid

@@ -64,8 +64,8 @@ class CandidateGenerator:
         wins = set(self.immediate_wins(position, player, timeout_check))
         blocks = set(self.immediate_wins(position, opponent, timeout_check))
 
-        own_patterns = self.matcher.find_patterns(position, player, timeout_check)
-        opponent_patterns = self.matcher.find_patterns(
+        own_patterns = self._position_patterns(position, player, timeout_check)
+        opponent_patterns = self._position_patterns(
             position,
             opponent,
             timeout_check,
@@ -196,9 +196,11 @@ class CandidateGenerator:
             for pattern in own_patterns
         )
         defensive_score = sum(
-            self.config.pattern_scores[pattern.kind.value]
+            self.config.defense_pattern_scores[pattern.kind.value]
             for pattern in opponent_patterns
         )
+        local_score = int(local_score * self.config.attack_factor)
+        defensive_score = int(defensive_score * self.config.defense_factor)
         order_scale = max(1, self.config.local_pattern_order_scale)
         return base + (local_score + defensive_score) // order_scale, tactical
 
@@ -220,6 +222,20 @@ class CandidateGenerator:
             )
         finally:
             position.grid[row][col] = int(Player.EMPTY)
+
+    def _position_patterns(
+        self,
+        position: SearchPosition,
+        player: Player,
+        timeout_check: Callable[[], None] | None,
+    ):
+        if timeout_check is not None:
+            timeout_check()
+        state = position.evaluation_state
+        patterns_for = getattr(state, "patterns_for", None)
+        if patterns_for is not None:
+            return patterns_for(player)
+        return self.matcher.find_patterns(position, player, timeout_check)
 
     def _nearby_empty_moves(
         self,

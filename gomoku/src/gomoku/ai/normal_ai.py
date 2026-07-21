@@ -66,6 +66,8 @@ class SearchStats:
     tt_replacements: int = 0
     vcf_found: bool = False
     vcf_nodes: int = 0
+    defensive_vcf_detected: bool = False
+    defensive_vcf_moves: tuple[Move, ...] = ()
     depth_results: tuple[DepthResult, ...] = ()
     root_moves: tuple[RootMoveScore, ...] = ()
 
@@ -111,6 +113,9 @@ class NormalAI:
         self._tt_replacement_start = 0
         self._vcf_found = False
         self._vcf_nodes = 0
+        self._defensive_vcf_detected = False
+        self._defensive_vcf_moves: tuple[Move, ...] = ()
+        self._forced_root_moves: set[Move] | None = None
         self._vcf_deadline = 0.0
         self._cancel_event: threading.Event | None = None
         self._search_lock = threading.Lock()
@@ -187,6 +192,9 @@ class NormalAI:
         self._tt_replacement_start = self.transposition_table.replacements
         self._vcf_found = False
         self._vcf_nodes = 0
+        self._defensive_vcf_detected = False
+        self._defensive_vcf_moves = ()
+        self._forced_root_moves = None
         self.transposition_table.new_generation()
 
         zobrist = self._zobrist_for_size(board.size)
@@ -196,6 +204,7 @@ class NormalAI:
             zobrist,
             max_candidate_radius=max(1, self.config.candidate_radius),
         )
+        self.evaluator.prepare(position)
         best_move = fallback
         completed_depth = 0
         timed_out = False
@@ -223,13 +232,13 @@ class NormalAI:
                 PatternKind.CLOSED_THREE,
                 PatternKind.CLOSED_FOUR,
             }
+            own_patterns = self._position_patterns(position, perspective)
+            opponent_patterns = self._position_patterns(
+                position,
+                perspective.opponent,
+            )
             has_vcf_start = any(
-                pattern.kind in vcf_start_kinds
-                for pattern in self.matcher.find_patterns(
-                    position,
-                    perspective,
-                    self._force_timeout_check,
-                )
+                pattern.kind in vcf_start_kinds for pattern in own_patterns
             )
             if (
                 self.config.enable_vcf
@@ -253,10 +262,49 @@ class NormalAI:
                     )
                 except VCFTimeout:
                     vcf_move = None
-                self._vcf_nodes = self.vcf_search.nodes
+                self._vcf_nodes += self.vcf_search.nodes
                 if vcf_move is not None:
                     self._vcf_found = True
                     return self._finish(vcf_move, completed_depth, False)
+
+            opponent_has_vcf_start = any(
+                pattern.kind in vcf_start_kinds
+                for pattern in opponent_patterns
+            )
+            if (
+                self.config.enable_defensive_vcf
+                and self.config.vcf_max_depth > 0
+                and opponent_has_vcf_start
+            ):
+                defensive_budget = (
+                    usable_ms
+                    * max(
+                        0.0,
+                        min(1.0, self.config.defensive_vcf_time_fraction),
+                    )
+                    / 1000
+                )
+                self._vcf_deadline = min(
+                    self._deadline,
+                    self.clock() + defensive_budget,
+                )
+                try:
+                    threat_found, defensive_moves = (
+                        self.vcf_search.find_defensive_moves(
+                            position,
+                            perspective,
+                            self._vcf_timeout_check,
+                        )
+                    )
+                except VCFTimeout:
+                    threat_found, defensive_moves = False, ()
+                self._vcf_nodes += self.vcf_search.nodes
+                if threat_found:
+                    self._defensive_vcf_detected = True
+                    self._defensive_vcf_moves = defensive_moves
+                    if defensive_moves:
+                        fallback = defensive_moves[0]
+                        self._forced_root_moves = set(defensive_moves)
 
             previous_score: int | None = None
             for depth in range(1, self.config.max_depth + 1):
@@ -322,6 +370,8 @@ class NormalAI:
                 0,
             ),
         )
+        if self._forced_root_moves is not None:
+            moves = [move for move in moves if move in self._forced_root_moves]
         best_score = -self.config.infinity_score
         best_move: Move | None = None
         root_scores: list[RootMoveScore] = []
@@ -685,6 +735,22 @@ class NormalAI:
                 self._evaluation_cache.popitem(last=False)
         return score
 
+    def _position_patterns(
+        self,
+        position: SearchPosition,
+        player: Player,
+    ):
+        self._force_timeout_check()
+        state = position.evaluation_state
+        patterns_for = getattr(state, "patterns_for", None)
+        if patterns_for is not None:
+            return patterns_for(player)
+        return self.matcher.find_patterns(
+            position,
+            player,
+            self._force_timeout_check,
+        )
+
     def _ordering_bonus(self, player: Player, move: Move, ply: int) -> int:
         bonus = self._history.get((player, move), 0)
         if move in self._killers.get(ply, ()):
@@ -763,6 +829,8 @@ class NormalAI:
             ),
             vcf_found=self._vcf_found,
             vcf_nodes=self._vcf_nodes,
+            defensive_vcf_detected=self._defensive_vcf_detected,
+            defensive_vcf_moves=self._defensive_vcf_moves,
             depth_results=tuple(self._depth_results),
             root_moves=tuple(self._completed_root_scores),
         )

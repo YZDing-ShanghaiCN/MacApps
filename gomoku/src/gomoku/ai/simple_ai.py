@@ -4,7 +4,7 @@ import random
 
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
-from gomoku.core.rules import get_valid_moves
+from gomoku.core.rules import check_win, get_valid_moves
 
 
 DIRECTIONS = (
@@ -39,11 +39,12 @@ class RandomAI:
 class SimpleAI:
     """Rule-based AI with a fixed priority table for continuous lines.
 
-    The AI first extends its own continuous lines, then blocks the opponent's
-    lines of the same length. Only the blocking endpoint is random. If no
-    continuous line of length two or greater can be extended, the AI first
-    grows an isolated own stone and then blocks an isolated opponent stone.
-    It chooses randomly only when no such nearby move exists.
+    Immediate wins and losses are handled for every five-in-a-row shape,
+    including gapped fours. The remaining easy-difficulty strategy first
+    extends its own continuous lines, then blocks the opponent's lines of the
+    same length. Only equivalent blocking endpoints are random. If no
+    continuous line of length two or greater can be extended, the AI grows an
+    isolated own stone and then blocks an isolated opponent stone.
     """
 
     def __init__(self, player: Player | int = Player.WHITE) -> None:
@@ -67,6 +68,17 @@ class SimpleAI:
         opponent = ai_player.opponent
         if opponent == Player.EMPTY:
             return valid_moves[0]
+
+        own_wins = self._immediate_winning_moves(board, ai_player, valid_moves)
+        if own_wins:
+            return own_wins[0]
+        opponent_wins = self._immediate_winning_moves(
+            board,
+            opponent,
+            valid_moves,
+        )
+        if opponent_wins:
+            return opponent_wins[0]
 
         # A higher line length always wins. For a given length, extending our
         # own line takes precedence over blocking the opponent's line.
@@ -95,6 +107,30 @@ class SimpleAI:
             return move
 
         return random.choice(valid_moves)
+
+    def _immediate_winning_moves(
+        self,
+        board: Board,
+        player: Player,
+        valid_moves: list[tuple[int, int]],
+    ) -> list[tuple[int, int]]:
+        wins: list[tuple[int, int]] = []
+        for row, col in valid_moves:
+            board.grid[row][col] = int(player)
+            try:
+                if check_win(board, row, col, player):
+                    wins.append((row, col))
+            finally:
+                board.grid[row][col] = int(Player.EMPTY)
+        center = (board.size - 1) / 2
+        return sorted(
+            wins,
+            key=lambda move: (
+                max(abs(move[0] - center), abs(move[1] - center)),
+                move[0],
+                move[1],
+            ),
+        )
 
     def _find_isolated_stone_neighbor(
         self,

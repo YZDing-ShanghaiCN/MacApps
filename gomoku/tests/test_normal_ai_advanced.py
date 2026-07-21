@@ -128,3 +128,25 @@ def test_vcf_finds_open_four_creation_without_mutating_board() -> None:
     assert ai.last_search_stats.vcf_found is True
     assert ai.last_search_stats.vcf_nodes > 0
     assert board.to_list() == before
+
+
+def test_defensive_vcf_restricts_root_to_moves_that_break_forced_attack() -> None:
+    board = Board()
+    for col in (5, 6, 7):
+        board.place(7, col, Player.BLACK)
+    before = board.to_list()
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        time_limit_ms=10_000,
+        max_depth=2,
+        vcf_time_fraction=0.5,
+        defensive_vcf_time_fraction=0.5,
+    )
+    ai = NormalAI(Player.WHITE, config=config)
+
+    move = ai.choose_move(board)
+
+    assert ai.last_search_stats.defensive_vcf_detected is True
+    assert set(ai.last_search_stats.defensive_vcf_moves) == {(7, 4), (7, 8)}
+    assert move in ai.last_search_stats.defensive_vcf_moves
+    assert board.to_list() == before

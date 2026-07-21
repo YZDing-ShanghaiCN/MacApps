@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from gomoku.ai.zobrist import ZobristTable
 from gomoku.core.board import Board
@@ -17,6 +18,12 @@ class SearchMove:
     col: int
     player: Player
     previous_hash: int
+
+
+class EvaluationState(Protocol):
+    def apply_move(self, row: int, col: int, player: Player) -> None: ...
+
+    def undo_move(self, row: int, col: int, player: Player) -> None: ...
 
 
 class SearchPosition(Board):
@@ -42,6 +49,7 @@ class SearchPosition(Board):
         self.max_candidate_radius = max(1, max_candidate_radius)
         self.hash_key = zobrist.hash_grid(self.grid, self.current_player)
         self.move_stack: list[SearchMove] = []
+        self.evaluation_state: EvaluationState | None = None
         self.empty_count = sum(
             cell == int(Player.EMPTY)
             for row in self.grid
@@ -103,6 +111,8 @@ class SearchPosition(Board):
         for active in self._active_moves.values():
             active.discard((row, col))
         self._update_neighbor_counts(row, col, 1)
+        if self.evaluation_state is not None:
+            self.evaluation_state.apply_move(row, col, player)
         self.hash_key ^= self.zobrist.piece_key(row, col, player)
         self.current_player = player.opponent
         self.hash_key ^= self.zobrist.side_to_move_key
@@ -118,6 +128,8 @@ class SearchPosition(Board):
         self.grid[move.row][move.col] = int(Player.EMPTY)
         self.occupied.remove((move.row, move.col))
         self._update_neighbor_counts(move.row, move.col, -1)
+        if self.evaluation_state is not None:
+            self.evaluation_state.undo_move(move.row, move.col, move.player)
         for radius, counts in self._neighbor_counts.items():
             if counts[move.row][move.col] > 0:
                 self._active_moves[radius].add((move.row, move.col))
@@ -129,6 +141,15 @@ class SearchPosition(Board):
         if self.hash_key != move.previous_hash:
             raise RuntimeError("Zobrist hash failed to restore after undo.")
         return move
+
+    def attach_evaluation_state(self, state: EvaluationState) -> None:
+        self.evaluation_state = state
+
+    def toggle_side_to_move(self) -> None:
+        """Reversibly switch the player-to-move for tactical null-turn probes."""
+
+        self.current_player = self.current_player.opponent
+        self.hash_key ^= self.zobrist.side_to_move_key
 
     def move_wins(self, row: int, col: int, player: Player | int) -> bool:
         """Test a hypothetical move without changing turn, history or hash."""

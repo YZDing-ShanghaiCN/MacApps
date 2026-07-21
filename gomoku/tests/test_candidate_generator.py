@@ -66,3 +66,43 @@ def test_crossing_double_threat_point_is_ranked_first() -> None:
 
     moves = generator.generate(position_from(board, Player.WHITE), root=True)
     assert moves[0] == (7, 7)
+
+
+def test_defensive_pattern_scores_affect_candidate_ordering_value() -> None:
+    board = Board()
+    board.place(7, 5, Player.BLACK)
+    board.place(7, 6, Player.BLACK)
+    position = position_from(board, Player.WHITE)
+    move = (7, 7)
+    normal = CandidateGenerator(DEFAULT_NORMAL_AI_CONFIG, PatternMatcher())
+    normal_priority, _ = normal._rank_move(
+        position,
+        move,
+        Player.WHITE,
+        Player.BLACK,
+        set(),
+        set(),
+        False,
+        None,
+    )
+    defense_scores = dict(DEFAULT_NORMAL_AI_CONFIG.defense_pattern_scores)
+    defense_scores["open_three"] *= 10
+    tuned = CandidateGenerator(
+        replace(
+            DEFAULT_NORMAL_AI_CONFIG,
+            defense_pattern_scores=defense_scores,
+        ),
+        PatternMatcher(),
+    )
+    tuned_priority, _ = tuned._rank_move(
+        position,
+        move,
+        Player.WHITE,
+        Player.BLACK,
+        set(),
+        set(),
+        False,
+        None,
+    )
+
+    assert tuned_priority > normal_priority

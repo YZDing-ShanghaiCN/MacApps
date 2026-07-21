@@ -63,3 +63,23 @@ def test_incremental_candidate_neighborhood_restores_after_long_undo() -> None:
         position.undo_move()
     assert position.nearby_empty_moves(2) == original
     assert position.hash_key == position.recompute_hash()
+
+
+def test_null_turn_toggle_restores_player_and_zobrist_hash() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    position = SearchPosition.from_board(
+        board,
+        Player.WHITE,
+        ZobristTable(15, 77),
+    )
+    original_hash = position.hash_key
+
+    position.toggle_side_to_move()
+    assert position.current_player == Player.BLACK
+    assert position.hash_key == position.recompute_hash()
+    position.toggle_side_to_move()
+
+    assert position.current_player == Player.WHITE
+    assert position.hash_key == original_hash
+    assert position.hash_key == position.recompute_hash()

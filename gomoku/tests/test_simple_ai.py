@@ -222,6 +222,26 @@ def test_simple_ai_does_not_treat_a_gapped_shape_as_a_three() -> None:
     assert move in {(5, 4), (5, 7)}
 
 
+def test_simple_ai_wins_through_a_gap_before_continuous_strategy() -> None:
+    board = Board()
+    for col in (4, 5, 6, 8):
+        board.place(7, col, Player.WHITE)
+    for col in range(4, 7):
+        board.place(10, col, Player.BLACK)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 7)
+
+
+def test_simple_ai_blocks_the_only_gapped_immediate_win() -> None:
+    board = Board()
+    for col in (4, 5, 6, 8):
+        board.place(7, col, Player.BLACK)
+    for col in range(4, 7):
+        board.place(10, col, Player.WHITE)
+
+    assert SimpleAI(Player.WHITE).choose_move(board) == (7, 7)
+
+
 def test_simple_ai_randomly_blocks_an_end_of_opponent_three(monkeypatch) -> None:
     board = Board()
     for col in range(5, 8):

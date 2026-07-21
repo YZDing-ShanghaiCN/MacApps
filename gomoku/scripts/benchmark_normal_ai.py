@@ -36,7 +36,7 @@ POSITIONS = {
 def main() -> None:
     print(
         "position move depth nodes qnodes tt_hits eval_hits cutoffs "
-        "vcf elapsed_ms"
+        "vcf defensive_vcf elapsed_ms"
     )
     for name, stones in POSITIONS.items():
         board = Board()
@@ -55,6 +55,7 @@ def main() -> None:
             stats.eval_cache_hits,
             stats.beta_cutoffs,
             stats.vcf_found,
+            stats.defensive_vcf_detected,
             round(stats.elapsed_ms, 1),
         )
 

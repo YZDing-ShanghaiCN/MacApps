@@ -73,14 +73,39 @@ class PatternMatcher:
             return ()
 
         patterns: list[Pattern] = []
+        for direction, line in self.iter_lines(board):
+            if timeout_check is not None:
+                timeout_check()
+            patterns.extend(
+                self.find_patterns_in_line(board, line, direction, player_value)
+            )
+        return self._deduplicate_and_suppress(patterns)
+
+    def iter_lines(
+        self,
+        board: Board,
+    ) -> Iterable[tuple[tuple[int, int], tuple[Move, ...]]]:
+        """Yield stable direction/coordinate descriptors for every board line."""
+
         for direction in DIRECTIONS:
             for line in self._direction_lines(board, direction):
-                if timeout_check is not None:
-                    timeout_check()
-                patterns.extend(
-                    self._scan_line(board, line, direction, player_value)
-                )
-        return self._deduplicate_and_suppress(patterns)
+                yield direction, line
+
+    def find_patterns_in_line(
+        self,
+        board: Board,
+        line: tuple[Move, ...],
+        direction: tuple[int, int],
+        player: Player | int,
+    ) -> tuple[Pattern, ...]:
+        """Classify one line for incremental evaluation consumers."""
+
+        player_value = Player(player)
+        if player_value == Player.EMPTY:
+            return ()
+        return self._deduplicate_and_suppress(
+            self._scan_line(board, line, direction, player_value)
+        )
 
     def find_patterns_through_move(
         self,
