@@ -46,6 +46,9 @@ def test_tiny_arena_game_is_legal_and_bounded() -> None:
     assert result.winner is None
     assert result.searches["A"] == 2
     assert result.searches["B"] == 2
+    assert len(result.moves) == 4
+    assert result.moves[0].label == "A"
+    assert result.moves[1].label == "B"
 
 
 def test_compare_configs_swaps_colors() -> None:
@@ -66,3 +69,11 @@ def test_compare_configs_swaps_colors() -> None:
     assert summary.games == 2
     assert summary.draws == 2
     assert summary.wins == {"A": 0, "B": 0}
+    assert summary.wins_by_color == {
+        "A": {"black": 0, "white": 0},
+        "B": {"black": 0, "white": 0},
+    }
+    assert summary.score_rate == {"A": 0.5, "B": 0.5}
+    assert summary.elo_difference == {"A": 0.0, "B": -0.0}
+    assert summary.recommended_label is None
+    assert len(summary.game_records) == 2

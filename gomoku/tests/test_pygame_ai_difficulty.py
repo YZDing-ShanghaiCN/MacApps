@@ -80,3 +80,19 @@ def test_pygame_stale_result_cannot_hide_current_ai_result() -> None:
     assert app.game.board.grid[7][8] == Player.WHITE
     assert app.game.board.grid[0][0] == Player.EMPTY
     assert app.ai_thinking is False
+
+
+def test_pygame_exports_reproducible_debug_position(tmp_path) -> None:
+    app = lightweight_app()
+    app.ai = NormalAI(Player.WHITE)
+    app.ai_difficulty = config.AI_DIFFICULTY_NORMAL
+    app.game.make_move(7, 7)
+
+    path = app.export_debug_position(tmp_path)
+
+    assert path is not None and path.exists()
+    payload = path.read_text(encoding="utf-8")
+    assert '"app_version": "0.3.3"' in payload
+    assert '"move_count": 1' in payload
+    assert '"time_limit_ms": 800' in payload
+    assert "Exported:" in app.message

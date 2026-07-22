@@ -53,6 +53,17 @@ class NormalAIConfig:
     enable_defensive_vcf: bool = True
     defensive_vcf_time_fraction: float = 0.12
     vcf_defense_max_candidates: int = 16
+    enable_dynamic_vcf_budget: bool = True
+    vcf_min_budget_scale: float = 0.35
+    vcf_multiple_threat_budget_bonus: float = 0.15
+    vcf_pattern_budget_scales: Mapping[str, float] = field(
+        default_factory=lambda: {
+            "closed_four": 1.0,
+            "open_three": 1.0,
+            "jump_three": 0.85,
+            "closed_three": 0.45,
+        }
+    )
 
     mate_score: int = 1_000_000_000
     infinity_score: int = 2_000_000_000

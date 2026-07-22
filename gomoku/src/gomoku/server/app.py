@@ -30,7 +30,7 @@ async def _cleanup_expired_rooms() -> None:
 
 app = FastAPI(
     title="Gomoku API",
-    version="0.3.2",
+    version=config.APP_VERSION,
     docs_url="/docs" if config.ENABLE_API_DOCS else None,
     redoc_url="/redoc" if config.ENABLE_API_DOCS else None,
     openapi_url="/openapi.json" if config.ENABLE_API_DOCS else None,

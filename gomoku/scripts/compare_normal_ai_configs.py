@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
+import json
 from pathlib import Path
 import sys
 
@@ -28,6 +30,11 @@ def main() -> None:
     parser.add_argument("--config-b", type=Path)
     parser.add_argument("--node-budget", type=int, default=2_000)
     parser.add_argument("--max-moves", type=int, default=100)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the aggregate report and complete move records as JSON.",
+    )
     args = parser.parse_args()
 
     config_a = (
@@ -46,13 +53,28 @@ def main() -> None:
         node_budget=args.node_budget,
         max_moves=args.max_moves,
     )
-    print(f"games={summary.games} draws={summary.draws}")
+    print(
+        f"games={summary.games} draws={summary.draws} "
+        f"recommended={summary.recommended_label or 'inconclusive'}"
+    )
     for label in ("A", "B"):
+        low, high = summary.score_confidence_95[label]
         print(
             f"{label}: wins={summary.wins[label]} "
+            f"score={summary.score_rate[label]:.3f} "
+            f"95%=[{low:.3f},{high:.3f}] "
+            f"elo={summary.elo_difference[label]:+.1f} "
             f"avg_nodes={summary.average_nodes[label]:.1f} "
-            f"avg_depth={summary.average_completed_depth[label]:.2f}"
+            f"avg_depth={summary.average_completed_depth[label]:.2f} "
+            f"budget_stop={summary.budget_stop_rate[label]:.3f} "
+            f"vcf_hit={summary.vcf_hit_rate[label]:.3f}"
         )
+    if args.output:
+        args.output.write_text(
+            json.dumps(asdict(summary), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"report={args.output}")
 
 
 if __name__ == "__main__":

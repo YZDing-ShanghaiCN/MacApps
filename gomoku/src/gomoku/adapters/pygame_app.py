@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import queue
 import threading
+from pathlib import Path
 
 import pygame
 
 from gomoku import config
 from gomoku.ai.factory import create_ai
+from gomoku.ai.debug_snapshot import build_debug_snapshot, write_debug_snapshot
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
@@ -109,6 +111,24 @@ class PygameGomokuApp:
 
         if self.game.undo():
             self.message = ""
+
+    def export_debug_position(self, directory: Path | None = None) -> Path | None:
+        try:
+            snapshot = build_debug_snapshot(
+                self.game,
+                mode=self.mode,
+                ai_player=(
+                    self.ai_player if self.mode == config.MODE_VS_AI else None
+                ),
+                ai_difficulty=self.ai_difficulty,
+                ai=self.ai,
+            )
+            path = write_debug_snapshot(snapshot, directory or Path.cwd())
+        except OSError as exc:
+            self.message = f"Export failed: {exc}"
+            return None
+        self.message = f"Exported: {path.name}"
+        return path
 
     def handle_player_move(self, row: int, col: int) -> None:
         if not self.game.timer_running:
@@ -362,6 +382,7 @@ class PygameGomokuApp:
         )
         self.draw_button(buttons["reset"], "Restart")
         self.draw_button(buttons["undo"], "Undo")
+        self.draw_button(buttons["export"], "Export Position")
 
         if self.game.winner is not None:
             status = f"{player_label(self.game.winner)} wins"
@@ -411,6 +432,7 @@ class PygameGomokuApp:
             "start": pygame.Rect(config.MARGIN, top + 76, 128, 28),
             "reset": pygame.Rect(config.MARGIN + 136, top + 76, 104, 28),
             "undo": pygame.Rect(config.MARGIN + 248, top + 76, 88, 28),
+            "export": pygame.Rect(config.MARGIN + 344, top + 76, 150, 28),
         }
 
     def handle_control_click(self, x: int, y: int) -> bool:
@@ -440,6 +462,9 @@ class PygameGomokuApp:
             return True
         if buttons["undo"].collidepoint(x, y):
             self.undo_move()
+            return True
+        if buttons["export"].collidepoint(x, y):
+            self.export_debug_position()
             return True
         return False
 

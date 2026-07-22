@@ -19,6 +19,10 @@ const resultSummaryElement = document.querySelector("#result-summary");
 const resultPrimaryButton = document.querySelector("#result-primary-button");
 const resultSecondaryButton = document.querySelector("#result-secondary-button");
 const resultCloseButton = document.querySelector("#result-close-button");
+const aiDebugPanel = document.querySelector("#ai-debug-panel");
+const aiDebugSummaryElement = document.querySelector("#ai-debug-summary");
+const copyDebugButton = document.querySelector("#copy-debug-button");
+const downloadDebugButton = document.querySelector("#download-debug-button");
 
 let currentState = null;
 let stateReceivedAt = 0;
@@ -266,6 +270,27 @@ function updateResultDialog(state) {
   }
 }
 
+function updateAiDebug(state) {
+  const visible = state.mode === "vs_ai";
+  aiDebugPanel.hidden = !visible;
+  if (!visible) {
+    return;
+  }
+  const stats = state.ai_search_stats;
+  if (!stats) {
+    aiDebugSummaryElement.textContent = "简单 AI：规则策略，无搜索统计";
+    return;
+  }
+  aiDebugSummaryElement.textContent = [
+    `深度 ${stats.completed_depth}`,
+    `节点 ${stats.nodes}`,
+    `静态延伸 ${stats.quiescence_nodes}`,
+    `耗时 ${Number(stats.elapsed_ms || 0).toFixed(1)}ms`,
+    `VCF ${stats.vcf_found ? "进攻命中" : (stats.defensive_vcf_detected ? "防守命中" : "未命中")}`,
+    stats.timed_out ? "达到预算" : "完整结束",
+  ].join("　");
+}
+
 function render(state) {
   currentState = state;
   stateReceivedAt = Date.now();
@@ -274,6 +299,54 @@ function render(state) {
   updateTimer(state);
   renderBoard(state);
   updateResultDialog(state);
+  updateAiDebug(state);
+}
+
+async function loadDebugPosition() {
+  return requestJson("/api/debug-position");
+}
+
+async function copyDebugPosition() {
+  try {
+    const snapshot = await loadDebugPosition();
+    const text = JSON.stringify(snapshot, null, 2);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      if (!copied) {
+        throw new Error("浏览器不允许复制，请使用下载 JSON");
+      }
+    }
+    setMessage("问题局面已复制，可直接发送用于复现");
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  }
+}
+
+async function downloadDebugPosition() {
+  try {
+    const snapshot = await loadDebugPosition();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gomoku-position-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("问题局面 JSON 已生成");
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  }
 }
 
 async function loadState() {
@@ -498,6 +571,9 @@ undoButton.addEventListener("click", async () => {
     setMessage(friendlyErrorMessage(error.message));
   }
 });
+
+copyDebugButton.addEventListener("click", copyDebugPosition);
+downloadDebugButton.addEventListener("click", downloadDebugPosition);
 
 loadState();
 window.setInterval(() => {

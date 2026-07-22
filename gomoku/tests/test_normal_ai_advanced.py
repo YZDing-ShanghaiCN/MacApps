@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
@@ -8,6 +9,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.ai.normal_ai_config import DEFAULT_NORMAL_AI_CONFIG
+from gomoku.ai.pattern_matcher import PatternKind
 from gomoku.ai.search_position import SearchPosition
 from gomoku.ai.zobrist import ZobristTable
 from gomoku.core.board import Board
@@ -148,5 +150,55 @@ def test_defensive_vcf_restricts_root_to_moves_that_break_forced_attack() -> Non
 
     assert ai.last_search_stats.defensive_vcf_detected is True
     assert set(ai.last_search_stats.defensive_vcf_moves) == {(7, 4), (7, 8)}
+    assert {(7, 4), (7, 8)}.issubset(
+        set(ai.last_search_stats.defensive_vcf_proof_candidates)
+    )
+    assert ai.last_search_stats.defensive_vcf_budget_ms > 0
+    assert ai.last_search_stats.vcf_elapsed_ms >= 0
     assert move in ai.last_search_stats.defensive_vcf_moves
     assert board.to_list() == before
+
+
+def test_vcf_proof_candidates_ignore_ordinary_defense_limit() -> None:
+    board = Board()
+    for col in (5, 6, 7):
+        board.place(7, col, Player.BLACK)
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        time_limit_ms=10_000,
+        max_depth=1,
+        vcf_defense_max_candidates=0,
+        defensive_vcf_time_fraction=0.5,
+    )
+    ai = NormalAI(Player.WHITE, config=config)
+
+    move = ai.choose_move(board)
+
+    assert ai.last_search_stats.defensive_vcf_detected is True
+    assert move in {(7, 4), (7, 8)}
+
+
+def test_dynamic_vcf_budget_tracks_pattern_urgency() -> None:
+    ai = NormalAI(Player.WHITE)
+    closed_three = [SimpleNamespace(kind=PatternKind.CLOSED_THREE)]
+    jump_threes = [
+        SimpleNamespace(kind=PatternKind.JUMP_THREE),
+        SimpleNamespace(kind=PatternKind.JUMP_THREE),
+    ]
+
+    low = ai._vcf_budget_ms(1_000, closed_three, 0.2)
+    high = ai._vcf_budget_ms(1_000, jump_threes, 0.2)
+
+    assert 0 < low < high <= 200
+
+
+def test_dynamic_vcf_budget_can_be_disabled_for_fixed_fraction() -> None:
+    ai = NormalAI(
+        Player.WHITE,
+        config=replace(
+            DEFAULT_NORMAL_AI_CONFIG,
+            enable_dynamic_vcf_budget=False,
+        ),
+    )
+    patterns = [SimpleNamespace(kind=PatternKind.CLOSED_THREE)]
+    assert ai._vcf_budget_ms(1_000, patterns, 0.2) == 200

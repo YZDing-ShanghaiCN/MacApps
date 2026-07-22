@@ -17,3 +17,12 @@ def test_frontend_posts_selected_difficulty() -> None:
     javascript = (PROJECT_ROOT / "frontend" / "main.js").read_text()
     assert 'requestJson("/api/difficulty"' in javascript
     assert 'changeDifficulty("normal")' in javascript
+
+
+def test_frontend_exposes_ai_debug_export_controls() -> None:
+    html = (PROJECT_ROOT / "frontend" / "index.html").read_text()
+    javascript = (PROJECT_ROOT / "frontend" / "main.js").read_text()
+    assert 'id="ai-debug-panel"' in html
+    assert 'id="copy-debug-button"' in html
+    assert 'id="download-debug-button"' in html
+    assert 'requestJson("/api/debug-position")' in javascript

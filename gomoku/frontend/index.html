@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#2f6f67" />
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/style.css?v=0.3.2" />
+    <link rel="stylesheet" href="/static/style.css?v=0.3.3" />
   </head>
   <body>
     <main class="app-shell">
@@ -59,6 +59,14 @@
         <p class="orientation-hint">横屏使用可获得更大的棋盘和更准确的落子体验。</p>
         <div id="board" class="board" aria-label="15×15 五子棋棋盘"></div>
         <p id="message" class="message" role="status" aria-live="polite"></p>
+        <details id="ai-debug-panel" class="ai-debug-panel" hidden>
+          <summary>AI 调试信息</summary>
+          <p id="ai-debug-summary" class="ai-debug-summary">尚无搜索数据</p>
+          <div class="actions ai-debug-actions">
+            <button id="copy-debug-button" type="button">复制问题局面</button>
+            <button id="download-debug-button" type="button">下载 JSON</button>
+          </div>
+        </details>
       </section>
     </main>
 
@@ -73,7 +81,7 @@
       </div>
     </dialog>
 
-    <script src="/static/pwa.js?v=0.3.2"></script>
-    <script src="/static/main.js?v=0.3.2"></script>
+    <script src="/static/pwa.js?v=0.3.3"></script>
+    <script src="/static/main.js?v=0.3.3"></script>
   </body>
 </html>

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from gomoku import config
 from gomoku.adapters.web_adapter import serialize_game_state
+from gomoku.ai.debug_snapshot import build_debug_snapshot
 from gomoku.ai.factory import create_ai
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.core.board import Board
@@ -106,6 +107,19 @@ def state_response(session: LocalGameSession | None = None) -> dict:
     else:
         state["ai_search_stats"] = None
     return state
+
+
+def debug_position_response(session: LocalGameSession | None = None) -> dict:
+    """Serialize a reproducible local-game snapshot for issue reports."""
+
+    session = default_session if session is None else session
+    return build_debug_snapshot(
+        session.game,
+        mode=session.current_mode,
+        ai_player=active_ai_player(session),
+        ai_difficulty=session.current_ai_difficulty,
+        ai=session.ai,
+    )
 
 
 def validate_mode(mode: object) -> str | None:
@@ -267,6 +281,15 @@ def get_state(x_gomoku_session: str | None = Header(default=None)) -> dict:
     session = get_session(x_gomoku_session)
     with session.lock:
         return state_response(session)
+
+
+@router.get("/debug-position")
+def get_debug_position(
+    x_gomoku_session: str | None = Header(default=None),
+) -> dict:
+    session = get_session(x_gomoku_session)
+    with session.lock:
+        return debug_position_response(session)
 
 
 @router.post("/move")

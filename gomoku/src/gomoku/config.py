@@ -2,6 +2,7 @@
 
 import os
 
+APP_VERSION = "0.3.3"
 BOARD_SIZE = 15
 CELL_SIZE = 40
 MARGIN = 40

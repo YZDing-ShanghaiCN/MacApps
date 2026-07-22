@@ -68,6 +68,10 @@ class SearchStats:
     vcf_nodes: int = 0
     defensive_vcf_detected: bool = False
     defensive_vcf_moves: tuple[Move, ...] = ()
+    defensive_vcf_proof_candidates: tuple[Move, ...] = ()
+    attack_vcf_budget_ms: float = 0.0
+    defensive_vcf_budget_ms: float = 0.0
+    vcf_elapsed_ms: float = 0.0
     depth_results: tuple[DepthResult, ...] = ()
     root_moves: tuple[RootMoveScore, ...] = ()
 
@@ -115,6 +119,10 @@ class NormalAI:
         self._vcf_nodes = 0
         self._defensive_vcf_detected = False
         self._defensive_vcf_moves: tuple[Move, ...] = ()
+        self._defensive_vcf_proof_candidates: tuple[Move, ...] = ()
+        self._attack_vcf_budget_ms = 0.0
+        self._defensive_vcf_budget_ms = 0.0
+        self._vcf_elapsed_ms = 0.0
         self._forced_root_moves: set[Move] | None = None
         self._vcf_deadline = 0.0
         self._cancel_event: threading.Event | None = None
@@ -194,6 +202,10 @@ class NormalAI:
         self._vcf_nodes = 0
         self._defensive_vcf_detected = False
         self._defensive_vcf_moves = ()
+        self._defensive_vcf_proof_candidates = ()
+        self._attack_vcf_budget_ms = 0.0
+        self._defensive_vcf_budget_ms = 0.0
+        self._vcf_elapsed_ms = 0.0
         self._forced_root_moves = None
         self.transposition_table.new_generation()
 
@@ -245,15 +257,20 @@ class NormalAI:
                 and self.config.vcf_max_depth > 0
                 and has_vcf_start
             ):
-                vcf_budget = (
-                    usable_ms
-                    * max(0.0, min(1.0, self.config.vcf_time_fraction))
-                    / 1000
+                self._attack_vcf_budget_ms = self._vcf_budget_ms(
+                    usable_ms,
+                    own_patterns,
+                    self.config.vcf_time_fraction,
+                )
+                self._attack_vcf_budget_ms = min(
+                    self._attack_vcf_budget_ms,
+                    max(0.0, (self._deadline - self.clock()) * 1000),
                 )
                 self._vcf_deadline = min(
                     self._deadline,
-                    self.clock() + vcf_budget,
+                    self.clock() + self._attack_vcf_budget_ms / 1000,
                 )
+                vcf_started = self.clock()
                 try:
                     vcf_move = self.vcf_search.find_winning_move(
                         position,
@@ -262,6 +279,10 @@ class NormalAI:
                     )
                 except VCFTimeout:
                     vcf_move = None
+                self._vcf_elapsed_ms += max(
+                    0.0,
+                    (self.clock() - vcf_started) * 1000,
+                )
                 self._vcf_nodes += self.vcf_search.nodes
                 if vcf_move is not None:
                     self._vcf_found = True
@@ -276,18 +297,20 @@ class NormalAI:
                 and self.config.vcf_max_depth > 0
                 and opponent_has_vcf_start
             ):
-                defensive_budget = (
-                    usable_ms
-                    * max(
-                        0.0,
-                        min(1.0, self.config.defensive_vcf_time_fraction),
-                    )
-                    / 1000
+                self._defensive_vcf_budget_ms = self._vcf_budget_ms(
+                    usable_ms,
+                    opponent_patterns,
+                    self.config.defensive_vcf_time_fraction,
+                )
+                self._defensive_vcf_budget_ms = min(
+                    self._defensive_vcf_budget_ms,
+                    max(0.0, (self._deadline - self.clock()) * 1000),
                 )
                 self._vcf_deadline = min(
                     self._deadline,
-                    self.clock() + defensive_budget,
+                    self.clock() + self._defensive_vcf_budget_ms / 1000,
                 )
+                vcf_started = self.clock()
                 try:
                     threat_found, defensive_moves = (
                         self.vcf_search.find_defensive_moves(
@@ -298,7 +321,14 @@ class NormalAI:
                     )
                 except VCFTimeout:
                     threat_found, defensive_moves = False, ()
+                self._vcf_elapsed_ms += max(
+                    0.0,
+                    (self.clock() - vcf_started) * 1000,
+                )
                 self._vcf_nodes += self.vcf_search.nodes
+                self._defensive_vcf_proof_candidates = (
+                    self.vcf_search.last_defensive_proof_candidates
+                )
                 if threat_found:
                     self._defensive_vcf_detected = True
                     self._defensive_vcf_moves = defensive_moves
@@ -751,6 +781,31 @@ class NormalAI:
             self._force_timeout_check,
         )
 
+    def _vcf_budget_ms(
+        self,
+        usable_ms: int,
+        patterns,
+        maximum_fraction: float,
+    ) -> float:
+        fraction = max(0.0, min(1.0, maximum_fraction))
+        maximum_ms = usable_ms * fraction
+        if not self.config.enable_dynamic_vcf_budget:
+            return maximum_ms
+        scales = [
+            self.config.vcf_pattern_budget_scales.get(pattern.kind.value, 0.0)
+            for pattern in patterns
+            if pattern.kind.value in self.config.vcf_pattern_budget_scales
+        ]
+        if not scales:
+            return 0.0
+        scale = max(scales)
+        scale += self.config.vcf_multiple_threat_budget_bonus * max(
+            0,
+            len(scales) - 1,
+        )
+        scale = max(self.config.vcf_min_budget_scale, min(1.0, scale))
+        return maximum_ms * scale
+
     def _ordering_bonus(self, player: Player, move: Move, ply: int) -> int:
         bonus = self._history.get((player, move), 0)
         if move in self._killers.get(ply, ()):
@@ -831,6 +886,12 @@ class NormalAI:
             vcf_nodes=self._vcf_nodes,
             defensive_vcf_detected=self._defensive_vcf_detected,
             defensive_vcf_moves=self._defensive_vcf_moves,
+            defensive_vcf_proof_candidates=(
+                self._defensive_vcf_proof_candidates
+            ),
+            attack_vcf_budget_ms=self._attack_vcf_budget_ms,
+            defensive_vcf_budget_ms=self._defensive_vcf_budget_ms,
+            vcf_elapsed_ms=self._vcf_elapsed_ms,
             depth_results=tuple(self._depth_results),
             root_moves=tuple(self._completed_root_scores),
         )

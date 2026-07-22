@@ -115,6 +115,26 @@ def test_state_contains_web_fields() -> None:
     )
 
 
+def test_debug_position_exports_reproducible_normal_ai_snapshot() -> None:
+    routes.set_current_mode(config.MODE_VS_AI)
+    routes.set_current_difficulty(config.AI_DIFFICULTY_NORMAL)
+    routes.game.make_move(7, 7)
+
+    response = request("GET", "/api/debug-position")
+
+    assert response["status"] == 200
+    snapshot = response["body"]
+    assert snapshot["schema_version"] == 1
+    assert snapshot["app_version"] == config.APP_VERSION
+    assert snapshot["position"]["board"][7][7] == int(Player.BLACK)
+    assert snapshot["position"]["move_history"] == [
+        {"row": 7, "col": 7, "player": int(Player.BLACK)}
+    ]
+    assert snapshot["game"]["ai_difficulty"] == config.AI_DIFFICULTY_NORMAL
+    assert snapshot["normal_ai"]["config"]["time_limit_ms"] == 800
+    assert snapshot["normal_ai"]["search_stats"]["nodes"] == 0
+
+
 def test_start_enables_cumulative_timer() -> None:
     response = request("POST", "/api/start")
 
@@ -155,7 +175,7 @@ def test_pwa_assets_are_served() -> None:
     assert manifest.status_code == 200
     assert "私人五子棋" in manifest.text
     assert service_worker.status_code == 200
-    assert "gomoku-shell-v0.3.2" in service_worker.text
+    assert "gomoku-shell-v0.3.3" in service_worker.text
 
 
 def test_move_returns_updated_state() -> None:

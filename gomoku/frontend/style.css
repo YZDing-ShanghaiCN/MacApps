@@ -73,6 +73,33 @@ h1 {
   color: var(--muted);
 }
 
+.ai-debug-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d2c2ac;
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.ai-debug-panel summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.ai-debug-summary {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ai-debug-actions {
+  margin-top: 10px;
+  justify-content: flex-start;
+}
+
 .mode-status {
   color: var(--text);
   font-weight: 700;
