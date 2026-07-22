@@ -106,3 +106,21 @@ def test_defensive_pattern_scores_affect_candidate_ordering_value() -> None:
     )
 
     assert tuned_priority > normal_priority
+
+
+def test_full_width_keeps_all_nearby_quiet_moves() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        root_max_quiet_candidates=1,
+    )
+    generator = CandidateGenerator(config, PatternMatcher())
+    position = position_from(board, Player.WHITE)
+
+    limited = generator.generate(position, root=True)
+    full_width = generator.generate(position, root=True, full_width=True)
+
+    assert len(limited) == 1
+    assert len(full_width) == board.size * board.size - 1
+    assert set(limited).issubset(full_width)

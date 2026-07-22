@@ -74,6 +74,11 @@ class SearchStats:
     vcf_elapsed_ms: float = 0.0
     depth_results: tuple[DepthResult, ...] = ()
     root_moves: tuple[RootMoveScore, ...] = ()
+    decision_reason: str = "not_searched"
+    selected_move: Move | None = None
+    vcf_tt_hits: int = 0
+    vcf_tt_entries: int = 0
+    endgame_full_width: bool = False
 
 
 class NormalAI:
@@ -100,6 +105,7 @@ class NormalAI:
         self._zobrist_tables: dict[int, ZobristTable] = {}
         self._deadline = 0.0
         self._started_at = 0.0
+        self._usable_ms = 0.0
         self._nodes = 0
         self._tt_hits = 0
         self._tt_cutoffs = 0
@@ -117,6 +123,7 @@ class NormalAI:
         self._tt_replacement_start = 0
         self._vcf_found = False
         self._vcf_nodes = 0
+        self._vcf_tt_hits = 0
         self._defensive_vcf_detected = False
         self._defensive_vcf_moves: tuple[Move, ...] = ()
         self._defensive_vcf_proof_candidates: tuple[Move, ...] = ()
@@ -124,6 +131,8 @@ class NormalAI:
         self._defensive_vcf_budget_ms = 0.0
         self._vcf_elapsed_ms = 0.0
         self._forced_root_moves: set[Move] | None = None
+        self._decision_reason = "not_searched"
+        self._endgame_full_width = False
         self._vcf_deadline = 0.0
         self._cancel_event: threading.Event | None = None
         self._search_lock = threading.Lock()
@@ -167,6 +176,7 @@ class NormalAI:
             perspective = self.player
         if perspective != self._perspective:
             self.transposition_table.clear()
+            self.vcf_search.clear()
             self._evaluation_cache.clear()
             self._perspective = perspective
 
@@ -183,6 +193,7 @@ class NormalAI:
             0,
             self.config.time_limit_ms - self.config.time_safety_margin_ms,
         )
+        self._usable_ms = float(usable_ms)
         self._deadline = self._started_at + usable_ms / 1000
         self._nodes = 0
         self._tt_hits = 0
@@ -200,6 +211,7 @@ class NormalAI:
         self._tt_replacement_start = self.transposition_table.replacements
         self._vcf_found = False
         self._vcf_nodes = 0
+        self._vcf_tt_hits = 0
         self._defensive_vcf_detected = False
         self._defensive_vcf_moves = ()
         self._defensive_vcf_proof_candidates = ()
@@ -207,6 +219,8 @@ class NormalAI:
         self._defensive_vcf_budget_ms = 0.0
         self._vcf_elapsed_ms = 0.0
         self._forced_root_moves = None
+        self._decision_reason = "legal_fallback"
+        self._endgame_full_width = False
         self.transposition_table.new_generation()
 
         zobrist = self._zobrist_for_size(board.size)
@@ -228,6 +242,11 @@ class NormalAI:
                 self._force_timeout_check,
             )
             if own_wins:
+                self._decision_reason = "immediate_win"
+                self._completed_root_scores = [
+                    RootMoveScore(move, self.config.mate_score)
+                    for move in own_wins[:3]
+                ]
                 return self._finish(own_wins[0], completed_depth, False)
 
             opponent_wins = self.candidates.immediate_wins(
@@ -236,6 +255,11 @@ class NormalAI:
                 self._force_timeout_check,
             )
             if opponent_wins:
+                self._decision_reason = "immediate_block"
+                self._completed_root_scores = [
+                    RootMoveScore(move, self.config.mate_score - 1)
+                    for move in opponent_wins[:3]
+                ]
                 return self._finish(opponent_wins[0], completed_depth, False)
 
             vcf_start_kinds = {
@@ -284,8 +308,13 @@ class NormalAI:
                     (self.clock() - vcf_started) * 1000,
                 )
                 self._vcf_nodes += self.vcf_search.nodes
+                self._vcf_tt_hits += self.vcf_search.tt_hits
                 if vcf_move is not None:
                     self._vcf_found = True
+                    self._decision_reason = "vcf_forced_win"
+                    self._completed_root_scores = [
+                        RootMoveScore(vcf_move, self.config.mate_score - 1)
+                    ]
                     return self._finish(vcf_move, completed_depth, False)
 
             opponent_has_vcf_start = any(
@@ -326,6 +355,7 @@ class NormalAI:
                     (self.clock() - vcf_started) * 1000,
                 )
                 self._vcf_nodes += self.vcf_search.nodes
+                self._vcf_tt_hits += self.vcf_search.tt_hits
                 self._defensive_vcf_proof_candidates = (
                     self.vcf_search.last_defensive_proof_candidates
                 )
@@ -335,9 +365,21 @@ class NormalAI:
                     if defensive_moves:
                         fallback = defensive_moves[0]
                         self._forced_root_moves = set(defensive_moves)
+                        self._decision_reason = "defensive_vcf"
 
             previous_score: int | None = None
-            for depth in range(1, self.config.max_depth + 1):
+            search_depth_limit = self.config.max_depth
+            if (
+                self.config.endgame_full_width_empty_count > 0
+                and position.empty_count
+                <= self.config.endgame_full_width_empty_count
+            ):
+                self._endgame_full_width = True
+                search_depth_limit = min(
+                    position.empty_count,
+                    max(search_depth_limit, self.config.endgame_max_depth),
+                )
+            for depth in range(1, search_depth_limit + 1):
                 self._force_timeout_check()
                 nodes_before = self._nodes
                 if previous_score is None or self.config.aspiration_window <= 0:
@@ -356,6 +398,8 @@ class NormalAI:
                         score, depth_move = self._search_root(position, depth)
                 if depth_move is not None:
                     best_move = depth_move
+                    if self._decision_reason != "defensive_vcf":
+                        self._decision_reason = "iterative_deepening"
                 completed_depth = depth
                 previous_score = score
                 self._completed_root_scores = list(self._latest_root_scores)
@@ -389,6 +433,11 @@ class NormalAI:
         original_beta = beta
         entry = self.transposition_table.probe(position.hash_key)
         tt_move = entry.best_move if entry is not None else None
+        quiet_limit, full_width = self._candidate_options(
+            position,
+            root=True,
+            remaining_depth=depth,
+        )
         moves = self.candidates.generate(
             position,
             root=True,
@@ -399,6 +448,8 @@ class NormalAI:
                 move,
                 0,
             ),
+            quiet_limit=quiet_limit,
+            full_width=full_width,
         )
         if self._forced_root_moves is not None:
             moves = [move for move in moves if move in self._forced_root_moves]
@@ -543,6 +594,11 @@ class NormalAI:
                 tt_move=tt_move,
             )
 
+        quiet_limit, full_width = self._candidate_options(
+            position,
+            root=False,
+            remaining_depth=depth,
+        )
         moves = self.candidates.generate(
             position,
             root=False,
@@ -553,6 +609,8 @@ class NormalAI:
                 move,
                 ply,
             ),
+            quiet_limit=quiet_limit,
+            full_width=full_width,
         )
         next_depth = depth - 1
         next_extension = extension_depth
@@ -836,6 +894,49 @@ class NormalAI:
         if self._nodes % interval == 0:
             self._force_timeout_check()
 
+    def _candidate_options(
+        self,
+        position: SearchPosition,
+        *,
+        root: bool,
+        remaining_depth: int,
+    ) -> tuple[int | None, bool]:
+        """Return a dynamic quiet-move limit without trimming tactical moves."""
+
+        if (
+            self.config.endgame_full_width_empty_count > 0
+            and position.empty_count
+            <= self.config.endgame_full_width_empty_count
+        ):
+            self._endgame_full_width = True
+            return None, True
+
+        base = (
+            self.config.root_max_quiet_candidates
+            if root
+            else self.config.inner_max_quiet_candidates
+        )
+        if not self.config.enable_dynamic_candidates:
+            return base, False
+
+        scale = 1.0
+        occupied = position.size * position.size - position.empty_count
+        if occupied <= self.config.opening_move_threshold:
+            scale *= self.config.opening_candidate_scale
+        if remaining_depth >= self.config.deep_search_depth_threshold:
+            scale *= self.config.deep_search_candidate_scale
+        if self._usable_ms > 0:
+            remaining_ms = max(0.0, (self._deadline - self.clock()) * 1000)
+            if (
+                remaining_ms / self._usable_ms
+                <= self.config.low_time_remaining_fraction
+            ):
+                scale *= self.config.low_time_candidate_scale
+        return max(
+            self.config.minimum_quiet_candidates,
+            int(round(base * scale)),
+        ), False
+
     def _force_timeout_check(self) -> None:
         if (
             self._cancel_event is not None
@@ -894,6 +995,11 @@ class NormalAI:
             vcf_elapsed_ms=self._vcf_elapsed_ms,
             depth_results=tuple(self._depth_results),
             root_moves=tuple(self._completed_root_scores),
+            decision_reason=self._decision_reason,
+            selected_move=move,
+            vcf_tt_hits=self._vcf_tt_hits,
+            vcf_tt_entries=self.vcf_search.table_size,
+            endgame_full_width=self._endgame_full_width,
         )
         return move
 

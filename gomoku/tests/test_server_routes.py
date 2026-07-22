@@ -70,6 +70,7 @@ def request(method: str, path: str, json_body: dict | None = None) -> dict[str, 
 
 def setup_function() -> None:
     routes.set_current_mode(config.MODE_LOCAL_2P)
+    routes.set_human_color(config.DEFAULT_HUMAN_COLOR)
     routes.set_current_difficulty(config.AI_DIFFICULTY_SIMPLE)
     routes.cancel_pending_ai()
     routes.game.reset()
@@ -104,6 +105,9 @@ def test_state_contains_web_fields() -> None:
         "ai_thinking",
         "ai_error",
         "ai_search_stats",
+        "ai_decision",
+        "human_player",
+        "human_color_choice",
     }.issubset(response["body"])
     assert response["body"]["mode"] == config.MODE_LOCAL_2P
     assert response["body"]["ai_player"] is None
@@ -175,7 +179,7 @@ def test_pwa_assets_are_served() -> None:
     assert manifest.status_code == 200
     assert "私人五子棋" in manifest.text
     assert service_worker.status_code == 200
-    assert "gomoku-shell-v0.3.3" in service_worker.text
+    assert "gomoku-shell-v0.3.4" in service_worker.text
 
 
 def test_move_returns_updated_state() -> None:
@@ -270,6 +274,65 @@ def test_hard_difficulty_remains_unavailable() -> None:
         {"difficulty": config.AI_DIFFICULTY_HARD},
     )
     assert response["status"] == 400
+
+
+def test_human_can_select_white_and_ai_opens_as_black_after_start() -> None:
+    request("POST", "/api/mode", {"mode": config.MODE_VS_AI})
+    color_response = request(
+        "POST",
+        "/api/ai-color",
+        {"human_color": config.HUMAN_COLOR_WHITE},
+    )
+
+    assert color_response["status"] == 200
+    assert color_response["body"]["human_player"] == int(Player.WHITE)
+    assert color_response["body"]["ai_player"] == int(Player.BLACK)
+    assert color_response["body"]["move_count"] == 0
+
+    started = request("POST", "/api/start")
+    assert started["body"]["ai_thinking"] is True
+    deadline = time.monotonic() + 1
+    state = request("GET", "/api/state")["body"]
+    while state["ai_thinking"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+        state = request("GET", "/api/state")["body"]
+    assert state["move_count"] == 1
+    assert state["last_move"]["player"] == int(Player.BLACK)
+    assert state["current_player"] == int(Player.WHITE)
+
+
+def test_selected_human_color_survives_reset() -> None:
+    request("POST", "/api/mode", {"mode": config.MODE_VS_AI})
+    request(
+        "POST",
+        "/api/ai-color",
+        {"human_color": config.HUMAN_COLOR_WHITE},
+    )
+
+    reset = request("POST", "/api/reset")
+
+    assert reset["body"]["human_color_choice"] == config.HUMAN_COLOR_WHITE
+    assert reset["body"]["human_player"] == int(Player.WHITE)
+    assert reset["body"]["ai_player"] == int(Player.BLACK)
+
+
+def test_invalid_human_color_is_rejected() -> None:
+    response = request("POST", "/api/ai-color", {"human_color": "green"})
+    assert response["status"] == 400
+
+
+def test_simple_ai_decision_is_published_after_background_move() -> None:
+    request("POST", "/api/mode", {"mode": config.MODE_VS_AI})
+    request("POST", "/api/start")
+    moved = request("POST", "/api/move", {"row": 7, "col": 7})
+    assert moved["body"]["ai_thinking"] is True
+    deadline = time.monotonic() + 1
+    state = request("GET", "/api/state")["body"]
+    while state["ai_thinking"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+        state = request("GET", "/api/state")["body"]
+    assert state["ai_decision"]["reason"] != "not_searched"
+    assert state["ai_decision"]["candidates"]
 
 
 def test_move_is_rejected_while_ai_is_thinking() -> None:

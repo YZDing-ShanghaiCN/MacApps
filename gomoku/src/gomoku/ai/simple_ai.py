@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import random
+from dataclasses import asdict, dataclass
 
+from gomoku.ai.simple_ai_config import (
+    DEFAULT_SIMPLE_AI_CONFIG,
+    TIE_BREAK_VARIED,
+    SimpleAIConfig,
+)
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
 from gomoku.core.rules import check_win, get_valid_moves
@@ -26,14 +32,33 @@ NEIGHBOR_DIRECTIONS = (
 )
 
 
+Move = tuple[int, int]
+
+
+@dataclass(frozen=True)
+class SimpleCandidateScore:
+    move: Move
+    score: int
+
+
+@dataclass(frozen=True)
+class SimpleDecision:
+    reason: str = "not_searched"
+    selected_move: Move | None = None
+    candidates: tuple[SimpleCandidateScore, ...] = ()
+
+
 class RandomAI:
     """First-stage AI placeholder that chooses a random legal move."""
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.rng = random.Random(seed)
 
     def choose_move(self, board: Board) -> tuple[int, int] | None:
         moves = get_valid_moves(board)
         if not moves:
             return None
-        return random.choice(moves)
+        return self.rng.choice(moves)
 
 
 class SimpleAI:
@@ -47,8 +72,27 @@ class SimpleAI:
     isolated own stone and then blocks an isolated opponent stone.
     """
 
-    def __init__(self, player: Player | int = Player.WHITE) -> None:
+    def __init__(
+        self,
+        player: Player | int = Player.WHITE,
+        *,
+        config: SimpleAIConfig = DEFAULT_SIMPLE_AI_CONFIG,
+    ) -> None:
         self.player = Player(player)
+        self.config = config
+        self.rng = random.Random(config.random_seed)
+        self.random_choices = 0
+        self.last_decision = SimpleDecision()
+
+    def debug_state(self) -> dict:
+        """Return enough state to reproduce the next varied tie break."""
+
+        return {
+            "config": asdict(self.config),
+            "random_seed": self.config.random_seed,
+            "random_choices": self.random_choices,
+            "decision": asdict(self.last_decision),
+        }
 
     def choose_move(
         self,
@@ -58,55 +102,158 @@ class SimpleAI:
     ) -> tuple[int, int] | None:
         valid_moves = get_valid_moves(board)
         if not valid_moves:
+            self.last_decision = SimpleDecision(reason="no_legal_move")
             return None
 
         try:
             ai_player = self.player if player is None else Player(player)
         except ValueError:
-            return valid_moves[0]
+            return self._finish("invalid_player_fallback", valid_moves[:1], 0)
 
         opponent = ai_player.opponent
         if opponent == Player.EMPTY:
-            return valid_moves[0]
+            return self._finish("invalid_opponent_fallback", valid_moves[:1], 0)
 
         own_wins = self._immediate_winning_moves(board, ai_player, valid_moves)
         if own_wins:
-            return own_wins[0]
+            return self._finish("immediate_win", own_wins, 100_000)
         opponent_wins = self._immediate_winning_moves(
             board,
             opponent,
             valid_moves,
         )
         if opponent_wins:
-            return opponent_wins[0]
+            return self._finish("immediate_block", opponent_wins, 90_000)
 
         # A higher line length always wins. For a given length, extending our
         # own line takes precedence over blocking the opponent's line.
         # ``last_opponent_move`` remains part of the public API for callers,
         # but the complete board state now determines every strategy choice.
         for line_length in (4, 3, 2):
-            move = self._find_extension_move(board, ai_player, line_length)
-            if move is not None:
-                return move
+            own_extensions = self._find_extension_moves(
+                board,
+                ai_player,
+                line_length,
+            )
+            if own_extensions:
+                return self._finish(
+                    f"extend_own_{line_length}",
+                    own_extensions,
+                    50_000 + line_length * 1_000,
+                )
 
-            move = self._find_extension_move(
+            opponent_extensions = self._find_extension_moves(
                 board,
                 opponent,
                 line_length,
-                randomize_endpoint=True,
             )
-            if move is not None:
-                return move
+            if opponent_extensions:
+                return self._finish(
+                    f"block_opponent_{line_length}",
+                    opponent_extensions,
+                    40_000 + line_length * 1_000,
+                    varied=True,
+                )
 
         move = self._find_isolated_stone_neighbor(board, ai_player)
         if move is not None:
-            return move
+            return self._finish("grow_isolated_own_stone", [move], 20_000)
 
         move = self._find_isolated_stone_neighbor(board, opponent)
         if move is not None:
-            return move
+            return self._finish("block_isolated_opponent_stone", [move], 10_000)
 
-        return random.choice(valid_moves)
+        return self._fallback_move(board, ai_player, valid_moves)
+
+    def _finish(
+        self,
+        reason: str,
+        candidates: list[Move],
+        score: int,
+        *,
+        varied: bool = False,
+    ) -> Move:
+        ordered = sorted(candidates)
+        if varied and self.config.tie_break_mode == TIE_BREAK_VARIED:
+            selected = self.rng.choice(ordered)
+            self.random_choices += 1
+        else:
+            selected = ordered[0]
+        self.last_decision = SimpleDecision(
+            reason=reason,
+            selected_move=selected,
+            candidates=tuple(
+                SimpleCandidateScore(move=move, score=score)
+                for move in ordered[:3]
+            ),
+        )
+        return selected
+
+    def _fallback_move(
+        self,
+        board: Board,
+        ai_player: Player,
+        valid_moves: list[Move],
+    ) -> Move:
+        occupied = [
+            (row, col)
+            for row in range(board.size)
+            for col in range(board.size)
+            if board.grid[row][col] != int(Player.EMPTY)
+        ]
+        if not occupied:
+            center = board.size // 2
+            return self._finish("empty_board_center", [(center, center)], 1_000)
+
+        radius = self.config.fallback_radius
+        nearby = [
+            move
+            for move in valid_moves
+            if any(
+                max(abs(move[0] - row), abs(move[1] - col)) <= radius
+                for row, col in occupied
+            )
+        ]
+        candidates = nearby or valid_moves
+        center = (board.size - 1) / 2
+        scored: list[SimpleCandidateScore] = []
+        for move in candidates:
+            own_neighbors = 0
+            opponent_neighbors = 0
+            for dr, dc in NEIGHBOR_DIRECTIONS:
+                row = move[0] + dr
+                col = move[1] + dc
+                if not board.is_inside(row, col):
+                    continue
+                value = board.grid[row][col]
+                if value == int(ai_player):
+                    own_neighbors += 1
+                elif value == int(ai_player.opponent):
+                    opponent_neighbors += 1
+            center_distance = int(
+                max(abs(move[0] - center), abs(move[1] - center))
+            )
+            score = (
+                own_neighbors * self.config.fallback_own_neighbor_weight
+                + opponent_neighbors * self.config.fallback_opponent_neighbor_weight
+                - center_distance * self.config.fallback_center_weight
+            )
+            scored.append(SimpleCandidateScore(move, score))
+
+        scored.sort(key=lambda item: (-item.score, item.move[0], item.move[1]))
+        best_score = scored[0].score
+        best_moves = [item.move for item in scored if item.score == best_score]
+        if self.config.tie_break_mode == TIE_BREAK_VARIED:
+            selected = self.rng.choice(best_moves)
+            self.random_choices += 1
+        else:
+            selected = best_moves[0]
+        self.last_decision = SimpleDecision(
+            reason="nearby_fallback" if nearby else "legal_fallback",
+            selected_move=selected,
+            candidates=tuple(scored[:3]),
+        )
+        return selected
 
     def _immediate_winning_moves(
         self,
@@ -206,8 +353,22 @@ class SimpleAI:
         precedence within the same endpoint category.
         """
 
-        if line_length < 2:
+        moves = self._find_extension_moves(board, player, line_length)
+        if not moves:
             return None
+        if randomize_endpoint and self.config.tie_break_mode == TIE_BREAK_VARIED:
+            self.random_choices += 1
+            return self.rng.choice(moves)
+        return moves[0]
+
+    def _find_extension_moves(
+        self,
+        board: Board,
+        player: Player,
+        line_length: int,
+    ) -> list[Move]:
+        if line_length < 2:
+            return []
 
         candidate_scores: dict[tuple[int, int], tuple[int, int]] = {}
         for dr, dc in DIRECTIONS:
@@ -263,7 +424,7 @@ class SimpleAI:
                         )
 
         if not candidate_scores:
-            return None
+            return []
 
         best_endpoint_count = max(score[0] for score in candidate_scores.values())
         best_line_count = max(
@@ -271,12 +432,10 @@ class SimpleAI:
             for score in candidate_scores.values()
             if score[0] == best_endpoint_count
         )
-        best_moves = [
+        return sorted(
+            [
             move
             for move, score in candidate_scores.items()
             if score == (best_endpoint_count, best_line_count)
-        ]
-
-        if randomize_endpoint:
-            return random.choice(best_moves)
-        return best_moves[0]
+            ]
+        )

@@ -6,6 +6,7 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from gomoku.ai.simple_ai import RandomAI, SimpleAI
+from gomoku.ai.simple_ai_config import SimpleAIConfig, TIE_BREAK_STABLE
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
 
@@ -309,3 +310,48 @@ def test_random_ai_still_returns_legal_move() -> None:
 
     assert move is not None
     assert board.is_empty(*move)
+
+
+def test_simple_ai_varied_tie_break_is_reproducible_from_instance_seed() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.BLACK)
+    config = SimpleAIConfig(random_seed=0)
+
+    first = SimpleAI(Player.WHITE, config=config)
+    second = SimpleAI(Player.WHITE, config=config)
+
+    assert first.choose_move(board) == second.choose_move(board) == (7, 8)
+    assert first.debug_state()["random_choices"] == 1
+
+
+def test_simple_ai_stable_tie_break_always_uses_sorted_first_move() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.BLACK)
+    ai = SimpleAI(
+        Player.WHITE,
+        config=SimpleAIConfig(tie_break_mode=TIE_BREAK_STABLE, random_seed=0),
+    )
+
+    assert ai.choose_move(board) == (7, 4)
+    assert ai.debug_state()["random_choices"] == 0
+
+
+def test_simple_ai_fallback_stays_near_existing_stones_and_reports_candidates() -> None:
+    board = Board()
+    board.place(1, 1, Player.BLACK)
+    board.place(1, 2, Player.WHITE)
+    ai = SimpleAI(Player.WHITE, config=SimpleAIConfig(random_seed=3))
+    valid_moves = [
+        (row, col)
+        for row in range(board.size)
+        for col in range(board.size)
+        if board.is_empty(row, col)
+    ]
+
+    move = ai._fallback_move(board, Player.WHITE, valid_moves)
+
+    assert max(abs(move[0] - 1), abs(move[1] - 1)) <= 2
+    assert ai.last_decision.reason == "nearby_fallback"
+    assert 1 <= len(ai.last_decision.candidates) <= 3

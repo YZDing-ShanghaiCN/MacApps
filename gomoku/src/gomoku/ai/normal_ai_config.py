@@ -35,6 +35,16 @@ class NormalAIConfig:
     candidate_radius: int = 2
     root_max_quiet_candidates: int = 20
     inner_max_quiet_candidates: int = 12
+    enable_dynamic_candidates: bool = True
+    opening_move_threshold: int = 10
+    opening_candidate_scale: float = 0.7
+    deep_search_depth_threshold: int = 4
+    deep_search_candidate_scale: float = 0.8
+    low_time_remaining_fraction: float = 0.2
+    low_time_candidate_scale: float = 0.65
+    minimum_quiet_candidates: int = 5
+    endgame_full_width_empty_count: int = 10
+    endgame_max_depth: int = 10
     transposition_capacity: int = 200_000
     transposition_bucket_size: int = 4
     threat_extension_depth: int = 2
@@ -53,6 +63,7 @@ class NormalAIConfig:
     enable_defensive_vcf: bool = True
     defensive_vcf_time_fraction: float = 0.12
     vcf_defense_max_candidates: int = 16
+    vcf_transposition_capacity: int = 50_000
     enable_dynamic_vcf_budget: bool = True
     vcf_min_budget_scale: float = 0.35
     vcf_multiple_threat_budget_bonus: float = 0.15

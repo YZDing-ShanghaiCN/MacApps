@@ -54,10 +54,24 @@ class CandidateGenerator:
         forcing_only: bool = False,
         timeout_check: Callable[[], None] | None = None,
         ordering_bonus: Callable[[Move], int] | None = None,
+        quiet_limit: int | None = None,
+        full_width: bool = False,
     ) -> list[Move]:
         player = position.current_player
         opponent = player.opponent
-        nearby = self._nearby_empty_moves(position, self.config.candidate_radius)
+        nearby = (
+            {
+                (row, col)
+                for row in range(position.size)
+                for col in range(position.size)
+                if position.is_empty(row, col)
+            }
+            if full_width
+            else self._nearby_empty_moves(
+                position,
+                self.config.candidate_radius,
+            )
+        )
         if not nearby:
             return []
 
@@ -124,11 +138,15 @@ class CandidateGenerator:
         )
         tactical_moves = [item.move for item in ranked if item.tactical]
         quiet_moves = [item.move for item in ranked if not item.tactical]
-        limit = (
-            self.config.root_max_quiet_candidates
-            if root
-            else self.config.inner_max_quiet_candidates
-        )
+        if full_width:
+            return tactical_moves + quiet_moves
+        limit = quiet_limit
+        if limit is None:
+            limit = (
+                self.config.root_max_quiet_candidates
+                if root
+                else self.config.inner_max_quiet_candidates
+            )
         return tactical_moves + quiet_moves[:limit]
 
     def _rank_move(

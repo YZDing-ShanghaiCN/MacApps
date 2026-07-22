@@ -36,6 +36,8 @@ def serialize_game_state(
     ai_difficulty: str = config.DEFAULT_AI_DIFFICULTY,
     ai_thinking: bool = False,
     ai_error: str | None = None,
+    human_player: Player | int | None = None,
+    human_color_choice: str = config.DEFAULT_HUMAN_COLOR,
 ) -> dict:
     """Return a JSON-friendly game state for the web API."""
 
@@ -58,6 +60,8 @@ def serialize_game_state(
         "ai_difficulty": ai_difficulty,
         "ai_thinking": ai_thinking,
         "ai_error": ai_error,
+        "human_player": int(human_player) if human_player is not None else None,
+        "human_color_choice": human_color_choice,
     }
 
 
@@ -68,6 +72,8 @@ def game_to_response(
     ai_difficulty: str = config.DEFAULT_AI_DIFFICULTY,
     ai_thinking: bool = False,
     ai_error: str | None = None,
+    human_player: Player | int | None = None,
+    human_color_choice: str = config.DEFAULT_HUMAN_COLOR,
 ) -> dict:
     """Backward-compatible alias for older web API code."""
 
@@ -78,4 +84,6 @@ def game_to_response(
         ai_difficulty=ai_difficulty,
         ai_thinking=ai_thinking,
         ai_error=ai_error,
+        human_player=human_player,
+        human_color_choice=human_color_choice,
     )

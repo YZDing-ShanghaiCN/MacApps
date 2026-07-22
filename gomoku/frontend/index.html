@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#2f6f67" />
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/style.css?v=0.3.3" />
+    <link rel="stylesheet" href="/static/style.css?v=0.3.4" />
   </head>
   <body>
     <main class="app-shell">
@@ -16,7 +16,7 @@
           <div>
             <h1>五子棋</h1>
             <p id="mode-status" class="mode-status">模式：双人对战</p>
-            <p id="status" class="status">Loading...</p>
+            <p id="status" class="status" aria-live="polite">Loading...</p>
             <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
           </div>
           <div class="controls">
@@ -38,6 +38,11 @@
               <button id="difficulty-hard-button" type="button" disabled>
                 困难（开发中）
               </button>
+            </div>
+            <div id="color-actions" class="option-actions" role="group" aria-label="选择人类棋色" hidden>
+              <button id="color-black-button" type="button" aria-pressed="true">我执黑</button>
+              <button id="color-white-button" type="button" aria-pressed="false">我执白</button>
+              <button id="color-random-button" type="button" aria-pressed="false">随机棋色</button>
             </div>
             <div class="actions">
               <button id="start-button" type="button">开始对局</button>
@@ -62,6 +67,9 @@
         <details id="ai-debug-panel" class="ai-debug-panel" hidden>
           <summary>AI 调试信息</summary>
           <p id="ai-debug-summary" class="ai-debug-summary">尚无搜索数据</p>
+          <ol id="ai-debug-candidates" class="ai-debug-candidates">
+            <li>完成一次 AI 落子后显示候选</li>
+          </ol>
           <div class="actions ai-debug-actions">
             <button id="copy-debug-button" type="button">复制问题局面</button>
             <button id="download-debug-button" type="button">下载 JSON</button>
@@ -81,7 +89,7 @@
       </div>
     </dialog>
 
-    <script src="/static/pwa.js?v=0.3.3"></script>
-    <script src="/static/main.js?v=0.3.3"></script>
+    <script src="/static/pwa.js?v=0.3.4"></script>
+    <script src="/static/main.js?v=0.3.4"></script>
   </body>
 </html>

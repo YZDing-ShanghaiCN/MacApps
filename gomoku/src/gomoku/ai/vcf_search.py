@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -44,7 +45,10 @@ class VCFSearch:
         self.config = config
         self.candidates = candidates
         self.nodes = 0
-        self._failed: set[tuple[int, int]] = set()
+        self.tt_hits = 0
+        self._proof_table: OrderedDict[
+            tuple[int, Player, int], VCFProof | None
+        ] = OrderedDict()
         self.last_proof: VCFProof | None = None
         self.last_defensive_proof_candidates: tuple[Move, ...] = ()
 
@@ -55,6 +59,7 @@ class VCFSearch:
         timeout_check: Callable[[], None],
     ) -> Move | None:
         self.nodes = 0
+        self.tt_hits = 0
         self.last_proof = self._find_winning_proof(
             position,
             attacker,
@@ -71,6 +76,7 @@ class VCFSearch:
         """Return whether the opponent has VCF and moves that break the proof."""
 
         self.nodes = 0
+        self.tt_hits = 0
         self.last_defensive_proof_candidates = ()
         if position.current_player != defender:
             return False, ()
@@ -136,7 +142,6 @@ class VCFSearch:
         attacker: Player,
         timeout_check: Callable[[], None],
     ) -> VCFProof | None:
-        self._failed.clear()
         if position.current_player != attacker:
             return None
         return self._search_attacker(
@@ -157,9 +162,12 @@ class VCFSearch:
         self.nodes += 1
         if remaining_depth <= 0:
             return None
-        cache_key = (position.hash_key, remaining_depth)
-        if cache_key in self._failed:
-            return None
+        cache_key = (position.hash_key, attacker, remaining_depth)
+        if cache_key in self._proof_table:
+            self.tt_hits += 1
+            cached = self._proof_table[cache_key]
+            self._proof_table.move_to_end(cache_key)
+            return cached
 
         moves = self.candidates.generate(
             position,
@@ -177,7 +185,9 @@ class VCFSearch:
                     last.col,
                     last.player,
                 ):
-                    return VCFProof(move, (move,))
+                    proof = VCFProof(move, (move,))
+                    self._store(cache_key, proof)
+                    return proof
 
                 defender = position.current_player
                 defender_wins = self.candidates.immediate_wins(
@@ -193,11 +203,13 @@ class VCFSearch:
                 if defender_wins or not attacker_wins:
                     continue
                 if len(attacker_wins) >= 2:
-                    return VCFProof(
+                    proof = VCFProof(
                         move,
                         (move,),
                         winning_points=tuple(attacker_wins),
                     )
+                    self._store(cache_key, proof)
+                    return proof
 
                 forced_block = attacker_wins[0]
                 position.make_move(*forced_block)
@@ -209,17 +221,39 @@ class VCFSearch:
                         timeout_check,
                     )
                     if continuation is not None:
-                        return VCFProof(
+                        proof = VCFProof(
                             first_move=move,
                             attacker_moves=(move,) + continuation.attacker_moves,
                             forced_defenses=(forced_block,)
                             + continuation.forced_defenses,
                             winning_points=continuation.winning_points,
                         )
+                        self._store(cache_key, proof)
+                        return proof
                 finally:
                     position.undo_move()
             finally:
                 position.undo_move()
 
-        self._failed.add(cache_key)
+        self._store(cache_key, None)
         return None
+
+    def clear(self) -> None:
+        self._proof_table.clear()
+
+    @property
+    def table_size(self) -> int:
+        return len(self._proof_table)
+
+    def _store(
+        self,
+        key: tuple[int, Player, int],
+        proof: VCFProof | None,
+    ) -> None:
+        capacity = max(0, self.config.vcf_transposition_capacity)
+        if capacity == 0:
+            return
+        self._proof_table[key] = proof
+        self._proof_table.move_to_end(key)
+        while len(self._proof_table) > capacity:
+            self._proof_table.popitem(last=False)

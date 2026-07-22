@@ -9,6 +9,7 @@ from pathlib import Path
 
 from gomoku import config
 from gomoku.ai.normal_ai import NormalAI
+from gomoku.ai.simple_ai import SimpleAI
 from gomoku.core.enums import Player
 from gomoku.core.game import GomokuGame
 
@@ -24,6 +25,7 @@ def build_debug_snapshot(
     """Build a JSON-safe snapshot shared by Web and Pygame."""
 
     normal_ai = ai if isinstance(ai, NormalAI) else None
+    simple_ai = ai if isinstance(ai, SimpleAI) else None
     return {
         "schema_version": 1,
         "app_version": config.APP_VERSION,
@@ -63,6 +65,7 @@ def build_debug_snapshot(
                 else None
             ),
         },
+        "simple_ai": simple_ai.debug_state() if simple_ai is not None else None,
     }
 
 

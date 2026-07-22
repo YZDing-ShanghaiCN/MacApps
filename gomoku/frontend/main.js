@@ -9,6 +9,10 @@ const difficultyActionsElement = document.querySelector("#difficulty-actions");
 const difficultySimpleButton = document.querySelector("#difficulty-simple-button");
 const difficultyNormalButton = document.querySelector("#difficulty-normal-button");
 const difficultyHardButton = document.querySelector("#difficulty-hard-button");
+const colorActionsElement = document.querySelector("#color-actions");
+const colorBlackButton = document.querySelector("#color-black-button");
+const colorWhiteButton = document.querySelector("#color-white-button");
+const colorRandomButton = document.querySelector("#color-random-button");
 const createRoomButton = document.querySelector("#create-room-button");
 const startButton = document.querySelector("#start-button");
 const resetButton = document.querySelector("#reset-button");
@@ -21,6 +25,7 @@ const resultSecondaryButton = document.querySelector("#result-secondary-button")
 const resultCloseButton = document.querySelector("#result-close-button");
 const aiDebugPanel = document.querySelector("#ai-debug-panel");
 const aiDebugSummaryElement = document.querySelector("#ai-debug-summary");
+const aiDebugCandidatesElement = document.querySelector("#ai-debug-candidates");
 const copyDebugButton = document.querySelector("#copy-debug-button");
 const downloadDebugButton = document.querySelector("#download-debug-button");
 
@@ -31,16 +36,37 @@ let aiPollInFlight = false;
 let displayedResultKey = null;
 
 const LOCAL_SESSION_STORAGE_KEY = "gomoku.local.session_id";
-let localSessionId = localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
+let localSessionId = sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
 if (!localSessionId) {
   localSessionId = globalThis.crypto?.randomUUID?.() ||
     `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, localSessionId);
+  sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, localSessionId);
 }
 
 const MODE_LABELS = {
   local_2p: "双人对战",
   vs_ai: "人机对战",
+};
+
+const DIFFICULTY_LABELS = {
+  simple: "简单",
+  normal: "普通",
+  hard: "困难",
+};
+
+const DECISION_LABELS = {
+  not_searched: "尚未决策",
+  no_legal_move: "无合法落点",
+  immediate_win: "立即获胜",
+  immediate_block: "阻挡对手立即获胜",
+  vcf_forced_win: "连续冲四获胜",
+  defensive_vcf: "化解连续冲四",
+  iterative_deepening: "迭代加深搜索",
+  legal_fallback: "合法落点兜底",
+  nearby_fallback: "邻域落点兜底",
+  empty_board_center: "空棋盘中心",
+  grow_isolated_own_stone: "延伸己方孤子",
+  block_isolated_opponent_stone: "贴近对方孤子",
 };
 
 const STAR_POINTS_BY_SIZE = {
@@ -121,6 +147,10 @@ function friendlyErrorMessage(message) {
     return "AI 难度无效";
   }
 
+  if (message.includes("Human color must be")) {
+    return "棋色选择无效";
+  }
+
   if (message.includes("currently thinking")) {
     return "AI 正在思考，请稍候";
   }
@@ -130,13 +160,17 @@ function friendlyErrorMessage(message) {
 
 function updateMode(state) {
   const mode = state.mode || "local_2p";
-  modeStatusElement.textContent = `模式：${modeLabel(mode)}`;
+  const resolvedColor = state.human_player === 1
+    ? " · 你执黑"
+    : (state.human_player === 2 ? " · 你执白" : "");
+  modeStatusElement.textContent = `模式：${modeLabel(mode)}${resolvedColor}`;
   modeLocalButton.setAttribute("aria-pressed", String(mode === "local_2p"));
   modeAiButton.setAttribute("aria-pressed", String(mode === "vs_ai"));
   const aiMode = mode === "vs_ai";
   const difficulty = state.ai_difficulty || "simple";
   const busy = requestInFlight || state.ai_thinking;
   difficultyActionsElement.hidden = !aiMode;
+  colorActionsElement.hidden = !aiMode;
   difficultySimpleButton.disabled = !aiMode || busy;
   difficultySimpleButton.setAttribute(
     "aria-pressed",
@@ -148,12 +182,22 @@ function updateMode(state) {
     String(aiMode && difficulty === "normal"),
   );
   difficultyHardButton.disabled = true;
+  const humanColor = state.human_color_choice || "black";
+  for (const [button, color] of [
+    [colorBlackButton, "black"],
+    [colorWhiteButton, "white"],
+    [colorRandomButton, "random"],
+  ]) {
+    button.disabled = !aiMode || busy;
+    button.setAttribute("aria-pressed", String(aiMode && humanColor === color));
+  }
   startButton.disabled = busy || state.timer_running || state.game_over;
 }
 
 function updateStatus(state) {
   if (state.ai_thinking) {
-    statusElement.textContent = "普通 AI 思考中…";
+    const difficulty = DIFFICULTY_LABELS[state.ai_difficulty] || "AI";
+    statusElement.textContent = `${difficulty} AI 思考中…`;
     return;
   }
   if (state.winner_name) {
@@ -221,7 +265,7 @@ function renderBoard(state) {
         starPoints.has(`${rowIndex},${colIndex}`) ? "star-point" : "",
         isLastMove ? "last-move" : "",
         winningCells.has(`${rowIndex},${colIndex}`) ? "winning-cell" : "",
-        cell === 0 && state.timer_running && !state.game_over && !requestInFlight && !state.ai_thinking
+        cell === 0 && state.timer_running && !state.game_over && !requestInFlight && !state.ai_thinking && state.current_player !== state.ai_player
           ? (state.current_player === 1 ? "preview-black" : "preview-white")
           : "",
       ].filter(Boolean).join(" ");
@@ -229,7 +273,7 @@ function renderBoard(state) {
       button.dataset.col = colIndex;
       button.style.setProperty("--row-index", String(rowIndex));
       button.style.setProperty("--col-index", String(colIndex));
-      button.disabled = requestInFlight || state.ai_thinking || state.game_over || !state.timer_running || cell !== 0;
+      button.disabled = requestInFlight || state.ai_thinking || state.game_over || !state.timer_running || cell !== 0 || state.current_player === state.ai_player;
       button.setAttribute("aria-label", `第 ${rowIndex + 1} 行，第 ${colIndex + 1} 列`);
 
       if (cell !== 0) {
@@ -277,18 +321,37 @@ function updateAiDebug(state) {
     return;
   }
   const stats = state.ai_search_stats;
+  const decision = state.ai_decision;
   if (!stats) {
-    aiDebugSummaryElement.textContent = "简单 AI：规则策略，无搜索统计";
+    aiDebugSummaryElement.textContent = [
+      "简单 AI：规则策略",
+      `原因 ${DECISION_LABELS[decision?.reason] || decision?.reason || "尚未决策"}`,
+    ].join("　");
+  } else {
+    aiDebugSummaryElement.textContent = [
+      `深度 ${stats.completed_depth}`,
+      `节点 ${stats.nodes}`,
+      `静态延伸 ${stats.quiescence_nodes}`,
+      `耗时 ${Number(stats.elapsed_ms || 0).toFixed(1)}ms`,
+      `VCF ${stats.vcf_found ? "进攻命中" : (stats.defensive_vcf_detected ? "防守命中" : "未命中")}`,
+      stats.timed_out ? "达到预算" : "完整结束",
+      `原因 ${DECISION_LABELS[decision?.reason] || decision?.reason || "尚未决策"}`,
+    ].join("　");
+  }
+  const candidates = decision?.candidates || [];
+  aiDebugCandidatesElement.innerHTML = "";
+  if (!candidates.length) {
+    const item = document.createElement("li");
+    item.textContent = "完成一次 AI 落子后显示候选";
+    aiDebugCandidatesElement.appendChild(item);
     return;
   }
-  aiDebugSummaryElement.textContent = [
-    `深度 ${stats.completed_depth}`,
-    `节点 ${stats.nodes}`,
-    `静态延伸 ${stats.quiescence_nodes}`,
-    `耗时 ${Number(stats.elapsed_ms || 0).toFixed(1)}ms`,
-    `VCF ${stats.vcf_found ? "进攻命中" : (stats.defensive_vcf_detected ? "防守命中" : "未命中")}`,
-    stats.timed_out ? "达到预算" : "完整结束",
-  ].join("　");
+  candidates.slice(0, 3).forEach((candidate, index) => {
+    const item = document.createElement("li");
+    const move = candidate.move || [];
+    item.textContent = `#${index + 1}　(${Number(move[0]) + 1}, ${Number(move[1]) + 1})　评分 ${candidate.score}`;
+    aiDebugCandidatesElement.appendChild(item);
+  });
 }
 
 function render(state) {
@@ -419,6 +482,9 @@ async function startGame() {
     setMessage(friendlyErrorMessage(error.message));
   } finally {
     requestInFlight = false;
+    if (currentState) {
+      render(currentState);
+    }
   }
 }
 
@@ -453,6 +519,13 @@ async function resetGame() {
   setMessage("");
 }
 
+function confirmStateReset(actionLabel) {
+  if (!currentState || currentState.move_count === 0) {
+    return true;
+  }
+  return window.confirm(`${actionLabel}会清空当前棋局和累计用时，确定继续吗？`);
+}
+
 boardElement.addEventListener("click", (event) => {
   const cell = event.target.closest(".cell");
   if (!cell || !boardElement.contains(cell) || !currentState) {
@@ -468,6 +541,9 @@ boardElement.addEventListener("click", (event) => {
 
 async function changeMode(mode) {
   if (requestInFlight) {
+    return;
+  }
+  if (currentState?.mode === mode || !confirmStateReset("切换对战模式")) {
     return;
   }
   requestInFlight = true;
@@ -492,6 +568,9 @@ async function changeDifficulty(difficulty) {
   if (requestInFlight) {
     return;
   }
+  if (currentState?.ai_difficulty === difficulty || !confirmStateReset("切换 AI 难度")) {
+    return;
+  }
   requestInFlight = true;
   try {
     const state = await requestJson("/api/difficulty", {
@@ -500,6 +579,32 @@ async function changeDifficulty(difficulty) {
     });
     render(state);
     setMessage(`当前 AI 难度：${difficulty === "normal" ? "普通" : "简单"}`);
+  } catch (error) {
+    setMessage(friendlyErrorMessage(error.message));
+  } finally {
+    requestInFlight = false;
+    if (currentState) {
+      render(currentState);
+    }
+  }
+}
+
+async function changeHumanColor(humanColor) {
+  if (requestInFlight) {
+    return;
+  }
+  if (currentState?.human_color_choice === humanColor || !confirmStateReset("切换棋色")) {
+    return;
+  }
+  requestInFlight = true;
+  try {
+    const state = await requestJson("/api/ai-color", {
+      method: "POST",
+      body: JSON.stringify({ human_color: humanColor }),
+    });
+    render(state);
+    const resolved = state.human_player === 1 ? "黑棋" : "白棋";
+    setMessage(`本局你执${resolved}`);
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
   } finally {
@@ -524,6 +629,18 @@ difficultySimpleButton.addEventListener("click", () => {
 
 difficultyNormalButton.addEventListener("click", () => {
   changeDifficulty("normal");
+});
+
+colorBlackButton.addEventListener("click", () => {
+  changeHumanColor("black");
+});
+
+colorWhiteButton.addEventListener("click", () => {
+  changeHumanColor("white");
+});
+
+colorRandomButton.addEventListener("click", () => {
+  changeHumanColor("random");
 });
 
 createRoomButton.addEventListener("click", () => {

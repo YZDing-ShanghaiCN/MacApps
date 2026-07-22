@@ -92,7 +92,7 @@ def test_pygame_exports_reproducible_debug_position(tmp_path) -> None:
 
     assert path is not None and path.exists()
     payload = path.read_text(encoding="utf-8")
-    assert '"app_version": "0.3.3"' in payload
+    assert '"app_version": "0.3.4"' in payload
     assert '"move_count": 1' in payload
     assert '"time_limit_ms": 800' in payload
     assert "Exported:" in app.message

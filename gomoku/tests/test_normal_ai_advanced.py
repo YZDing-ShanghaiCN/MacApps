@@ -202,3 +202,60 @@ def test_dynamic_vcf_budget_can_be_disabled_for_fixed_fraction() -> None:
     )
     patterns = [SimpleNamespace(kind=PatternKind.CLOSED_THREE)]
     assert ai._vcf_budget_ms(1_000, patterns, 0.2) == 200
+
+
+def test_vcf_proof_table_reuses_completed_proof_between_searches() -> None:
+    board = Board()
+    for col in range(5, 8):
+        board.place(7, col, Player.WHITE)
+    board.place(6, 6, Player.BLACK)
+    ai = NormalAI(
+        Player.WHITE,
+        config=replace(
+            DEFAULT_NORMAL_AI_CONFIG,
+            time_limit_ms=10_000,
+            vcf_time_fraction=0.5,
+        ),
+    )
+
+    first = ai.choose_move(board)
+    first_nodes = ai.last_search_stats.vcf_nodes
+    second = ai.choose_move(board)
+
+    assert second == first
+    assert ai.last_search_stats.vcf_tt_hits >= 1
+    assert ai.last_search_stats.vcf_nodes <= first_nodes
+    assert ai.last_search_stats.vcf_tt_entries > 0
+
+
+def test_dynamic_candidate_width_and_endgame_full_width_are_configurable() -> None:
+    board = Board()
+    board.place(7, 7, Player.BLACK)
+    config = replace(
+        DEFAULT_NORMAL_AI_CONFIG,
+        root_max_quiet_candidates=20,
+        opening_candidate_scale=0.5,
+        minimum_quiet_candidates=3,
+    )
+    ai = NormalAI(Player.WHITE, config=config)
+    position = make_position(board)
+    ai._usable_ms = 1_000
+    ai._deadline = float("inf")
+
+    quiet_limit, full_width = ai._candidate_options(
+        position,
+        root=True,
+        remaining_depth=1,
+    )
+
+    assert quiet_limit == 10
+    assert full_width is False
+
+    position.empty_count = config.endgame_full_width_empty_count
+    quiet_limit, full_width = ai._candidate_options(
+        position,
+        root=False,
+        remaining_depth=2,
+    )
+    assert quiet_limit is None
+    assert full_width is True

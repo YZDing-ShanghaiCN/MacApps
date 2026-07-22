@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import random
 import threading
 import time
 from dataclasses import asdict
@@ -13,6 +14,7 @@ from gomoku.adapters.web_adapter import serialize_game_state
 from gomoku.ai.debug_snapshot import build_debug_snapshot
 from gomoku.ai.factory import create_ai
 from gomoku.ai.normal_ai import NormalAI
+from gomoku.ai.simple_ai import SimpleAI
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
 from gomoku.core.exceptions import GameOverError, InvalidMoveError
@@ -20,7 +22,7 @@ from gomoku.core.game import GomokuGame
 
 
 router = APIRouter(prefix="/api")
-AI_PLAYER = Player.WHITE
+AI_PLAYER = Player.WHITE  # Backward-compatible default; sessions own the value.
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 
 
@@ -29,7 +31,10 @@ class LocalGameSession:
         self.game = GomokuGame()
         self.current_mode = config.DEFAULT_MODE
         self.current_ai_difficulty = config.DEFAULT_AI_DIFFICULTY
-        self.ai = create_ai(self.current_ai_difficulty, AI_PLAYER)
+        self.human_color_choice = config.DEFAULT_HUMAN_COLOR
+        self._color_rng = random.Random()
+        self.ai_player = Player.WHITE
+        self.ai = create_ai(self.current_ai_difficulty, self.ai_player)
         self.ai_thinking = False
         self.ai_generation = 0
         self.ai_error: str | None = None
@@ -88,8 +93,14 @@ def _cleanup_local_sessions_locked() -> None:
 def active_ai_player(session: LocalGameSession | None = None) -> Player | None:
     session = default_session if session is None else session
     if session.current_mode == config.MODE_VS_AI:
-        return AI_PLAYER
+        return session.ai_player
     return None
+
+
+def active_human_player(session: LocalGameSession | None = None) -> Player | None:
+    session = default_session if session is None else session
+    ai_player = active_ai_player(session)
+    return ai_player.opponent if ai_player is not None else None
 
 
 def state_response(session: LocalGameSession | None = None) -> dict:
@@ -101,11 +112,27 @@ def state_response(session: LocalGameSession | None = None) -> dict:
         ai_difficulty=session.current_ai_difficulty,
         ai_thinking=session.ai_thinking,
         ai_error=session.ai_error,
+        human_player=active_human_player(session),
+        human_color_choice=session.human_color_choice,
     )
     if isinstance(session.ai, NormalAI):
         state["ai_search_stats"] = asdict(session.ai.last_search_stats)
     else:
         state["ai_search_stats"] = None
+    if isinstance(session.ai, SimpleAI):
+        state["ai_decision"] = asdict(session.ai.last_decision)
+    elif isinstance(session.ai, NormalAI):
+        stats = session.ai.last_search_stats
+        state["ai_decision"] = {
+            "reason": stats.decision_reason,
+            "selected_move": stats.selected_move,
+            "candidates": [
+                {"move": item.move, "score": item.score}
+                for item in stats.root_moves[:3]
+            ],
+        }
+    else:
+        state["ai_decision"] = None
     return state
 
 
@@ -137,6 +164,12 @@ def validate_difficulty(difficulty: object) -> str | None:
     return None
 
 
+def validate_human_color(color: object) -> str | None:
+    if isinstance(color, str) and color in config.HUMAN_COLOR_CHOICES:
+        return color
+    return None
+
+
 def invalid_mode_response() -> JSONResponse:
     return JSONResponse(
         status_code=400,
@@ -151,6 +184,18 @@ def invalid_difficulty_response() -> JSONResponse:
             "error": (
                 "AI difficulty must be one of: "
                 f"{', '.join(config.AVAILABLE_AI_DIFFICULTIES)}."
+            )
+        },
+    )
+
+
+def invalid_human_color_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": (
+                "Human color must be one of: "
+                f"{', '.join(config.HUMAN_COLOR_CHOICES)}."
             )
         },
     )
@@ -179,18 +224,54 @@ def set_current_difficulty(
     if difficulty not in config.AVAILABLE_AI_DIFFICULTIES:
         raise ValueError(f"AI difficulty is not available: {difficulty}.")
     session.current_ai_difficulty = difficulty
-    session.ai = create_ai(difficulty, AI_PLAYER)
+    session.ai = create_ai(difficulty, session.ai_player)
+
+
+def set_human_color(
+    color: str,
+    session: LocalGameSession | None = None,
+) -> None:
+    session = default_session if session is None else session
+    if color not in config.HUMAN_COLOR_CHOICES:
+        raise ValueError(f"Human color is not available: {color}.")
+    session.human_color_choice = color
+    _resolve_players(session)
+    session.ai = create_ai(session.current_ai_difficulty, session.ai_player)
+
+
+def _resolve_players(session: LocalGameSession) -> None:
+    if session.human_color_choice == config.HUMAN_COLOR_BLACK:
+        session.ai_player = Player.WHITE
+    elif session.human_color_choice == config.HUMAN_COLOR_WHITE:
+        session.ai_player = Player.BLACK
+    else:
+        session.ai_player = session._color_rng.choice(
+            (Player.BLACK, Player.WHITE)
+        )
+
+
+def reset_local_game(
+    session: LocalGameSession,
+    *,
+    reroll_random_color: bool = True,
+) -> None:
+    if reroll_random_color and (
+        session.human_color_choice == config.HUMAN_COLOR_RANDOM
+    ):
+        _resolve_players(session)
+    session.ai = create_ai(session.current_ai_difficulty, session.ai_player)
+    session.game.reset()
 
 
 def maybe_play_ai_move(
-    last_opponent_move: tuple[int, int],
+    last_opponent_move: tuple[int, int] | None,
     session: LocalGameSession | None = None,
 ) -> None:
     session = default_session if session is None else session
     if (
         session.current_mode != config.MODE_VS_AI
         or session.game.game_over
-        or session.game.current_player != AI_PLAYER
+        or session.game.current_player != session.ai_player
     ):
         return
 
@@ -221,7 +302,7 @@ def _run_ai_worker(
     generation: int,
     selected_ai,
     snapshot: Board,
-    last_opponent_move: tuple[int, int],
+    last_opponent_move: tuple[int, int] | None,
     cancel_event: threading.Event,
 ) -> None:
     try:
@@ -249,7 +330,7 @@ def _run_ai_worker(
             ai_move is not None
             and session.current_mode == config.MODE_VS_AI
             and not session.game.game_over
-            and session.game.current_player == AI_PLAYER
+            and session.game.current_player == session.ai_player
             and session.game.board.is_empty(*ai_move)
         ):
             session.game.make_move(*ai_move)
@@ -270,7 +351,12 @@ def cancel_pending_ai(session: LocalGameSession | None = None) -> None:
 def undo_for_current_mode(session: LocalGameSession | None = None) -> None:
     session = default_session if session is None else session
     if session.current_mode == config.MODE_VS_AI:
-        if session.game.undo() and session.game.current_player == AI_PLAYER:
+        if (
+            len(session.game.move_history) == 1
+            and session.game.move_history[-1][2] == session.ai_player
+        ):
+            return
+        if session.game.undo() and session.game.current_player == session.ai_player:
             session.game.undo()
         return
     session.game.undo()
@@ -310,7 +396,7 @@ def make_move(
     with session.lock:
         if session.ai_thinking or (
             session.current_mode == config.MODE_VS_AI
-            and session.game.current_player == AI_PLAYER
+            and session.game.current_player == session.ai_player
         ):
             return ai_busy_response()
         try:
@@ -322,7 +408,7 @@ def make_move(
         if (
             session.current_mode == config.MODE_VS_AI
             and not session.game.game_over
-            and session.game.current_player == AI_PLAYER
+            and session.game.current_player == session.ai_player
         ):
             maybe_play_ai_move((row, col), session)
         return state_response(session)
@@ -336,6 +422,7 @@ def reset_game(
     session = get_session(x_gomoku_session)
     with session.lock:
         cancel_pending_ai(session)
+        color_changed = False
         if payload is not None:
             if not isinstance(payload, dict):
                 return JSONResponse(
@@ -352,7 +439,13 @@ def reset_game(
                 if difficulty is None:
                     return invalid_difficulty_response()
                 set_current_difficulty(difficulty, session)
-        session.game.reset()
+            if "human_color" in payload:
+                color = validate_human_color(payload["human_color"])
+                if color is None:
+                    return invalid_human_color_response()
+                set_human_color(color, session)
+                color_changed = True
+        reset_local_game(session, reroll_random_color=not color_changed)
         return state_response(session)
 
 
@@ -363,6 +456,11 @@ def start_game(x_gomoku_session: str | None = Header(default=None)):
         if session.ai_thinking:
             return ai_busy_response()
         session.game.start_timer()
+        if (
+            session.current_mode == config.MODE_VS_AI
+            and session.game.current_player == session.ai_player
+        ):
+            maybe_play_ai_move(None, session)
         return state_response(session)
 
 
@@ -390,7 +488,7 @@ def change_mode(
     with session.lock:
         cancel_pending_ai(session)
         set_current_mode(requested_mode, session)
-        session.game.reset()
+        reset_local_game(session)
         return state_response(session)
 
 
@@ -409,5 +507,24 @@ def change_difficulty(
     with session.lock:
         cancel_pending_ai(session)
         set_current_difficulty(difficulty, session)
-        session.game.reset()
+        reset_local_game(session)
+        return state_response(session)
+
+
+@router.post("/ai-color")
+def change_ai_color(
+    payload: dict = Body(...),
+    x_gomoku_session: str | None = Header(default=None),
+):
+    session = get_session(x_gomoku_session)
+    try:
+        color = validate_human_color(payload["human_color"])
+    except (KeyError, TypeError):
+        color = None
+    if color is None:
+        return invalid_human_color_response()
+    with session.lock:
+        cancel_pending_ai(session)
+        set_human_color(color, session)
+        reset_local_game(session, reroll_random_color=False)
         return state_response(session)
