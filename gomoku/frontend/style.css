@@ -47,14 +47,23 @@ button:focus-visible,
 }
 
 .game-panel {
-  width: min(760px, 100%);
+  width: min(1080px, 100%);
 }
 
-.top-bar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+.game-header {
+  width: min(840px, 100%);
+  margin: 0 auto 24px;
+  padding: 22px 24px;
+  border: 1px solid #d2c2ac;
+  border-radius: 16px;
+  background: rgb(255 250 242 / 86%);
+  box-shadow: 0 10px 28px rgb(74 50 29 / 8%);
+  text-align: center;
+}
+
+.game-heading {
+  display: grid;
+  justify-items: center;
   margin-bottom: 16px;
 }
 
@@ -62,6 +71,18 @@ h1 {
   margin: 0 0 6px;
   font-size: 32px;
   line-height: 1.1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .mode-status,
@@ -74,7 +95,8 @@ h1 {
 }
 
 .ai-debug-panel {
-  margin-top: 12px;
+  width: min(760px, 100%);
+  margin: 18px auto 0;
   padding: 12px 14px;
   border: 1px solid #d2c2ac;
   border-radius: 8px;
@@ -147,7 +169,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .mode-actions,
@@ -157,7 +179,7 @@ h1 {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .mode-actions button,
@@ -229,11 +251,130 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin: 0 0 18px;
+  width: min(760px, 100%);
+  margin: 28px auto 0;
   padding: 18px 20px;
   border: 1px solid #b5d1cd;
   border-radius: 12px;
   background: #e9f3f1;
+}
+
+.game-table {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) auto minmax(140px, 180px);
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.board-stage {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+}
+
+.player-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
+  min-height: 250px;
+  padding: 24px 18px;
+  overflow: hidden;
+  border: 1px solid #d2c2ac;
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgb(74 50 29 / 10%);
+  text-align: center;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.player-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: #b7aa98;
+}
+
+.player-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 14px 36px rgb(47 111 103 / 18%);
+  transform: translateY(-3px);
+}
+
+.player-card.is-active::before {
+  background: var(--accent);
+}
+
+.player-card.is-thinking::before {
+  background: #e0a629;
+}
+
+.player-card.is-winner {
+  border-color: #e0a629;
+  box-shadow: 0 14px 36px rgb(224 166 41 / 24%);
+}
+
+.player-card.is-winner::before {
+  background: #e0a629;
+}
+
+.player-stone {
+  width: 66px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 5px 13px rgb(0 0 0 / 24%);
+}
+
+.player-stone-black {
+  background: #181818;
+}
+
+.player-stone-white {
+  border: 1px solid rgb(0 0 0 / 26%);
+  background: #f8f5ef;
+}
+
+.player-card-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.player-color,
+.player-state {
+  margin: 0;
+  color: var(--muted);
+}
+
+.player-color {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.player-role {
+  margin: 0;
+  font-size: 22px;
+}
+
+.player-state {
+  min-height: 22px;
+  font-size: 14px;
+}
+
+.player-card.is-active .player-state,
+.player-card.is-thinking .player-state {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.player-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .online-entry h2 {
@@ -466,6 +607,47 @@ dialog::backdrop {
   font-size: 12px;
 }
 
+@media (max-width: 960px) {
+  .game-panel {
+    width: min(760px, 100%);
+  }
+
+  .game-table {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .player-card {
+    grid-template-columns: auto 1fr auto;
+    justify-items: start;
+    min-height: 0;
+    padding: 14px 16px;
+    text-align: left;
+  }
+
+  .player-stone {
+    width: 44px;
+  }
+
+  .player-card-copy {
+    align-self: center;
+  }
+
+  .player-role {
+    font-size: 18px;
+  }
+
+  .player-time {
+    align-self: center;
+    font-size: 20px;
+  }
+
+  .board-stage {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 @media (max-width: 560px) {
   .app-shell {
     padding: 14px;
@@ -476,15 +658,46 @@ dialog::backdrop {
     font-size: 28px;
   }
 
-  .top-bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
+  .game-header {
+    margin-bottom: 14px;
+    padding: 18px 14px;
   }
 
   .controls {
     align-items: stretch;
     width: 100%;
+  }
+
+  .game-table {
+    gap: 8px;
+  }
+
+  .player-card {
+    grid-template-columns: auto 1fr;
+    gap: 9px;
+    padding: 11px 12px;
+  }
+
+  .player-stone {
+    width: 34px;
+  }
+
+  .player-color,
+  .player-state {
+    font-size: 12px;
+  }
+
+  .player-role {
+    font-size: 16px;
+  }
+
+  .player-time {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    padding-top: 8px;
+    border-top: 1px solid #e1d6c8;
+    font-size: 19px;
+    text-align: center;
   }
 
   .mode-actions,
@@ -499,7 +712,15 @@ dialog::backdrop {
   .difficulty-actions button,
   .option-actions button,
   .actions button {
-    flex: 1 1 120px;
+    flex: 1 1 88px;
+    min-width: 0;
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  #difficulty-hard-button {
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .online-entry {

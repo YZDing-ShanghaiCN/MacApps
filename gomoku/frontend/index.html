@@ -12,12 +12,12 @@
   <body>
     <main class="app-shell">
       <section class="game-panel" aria-label="五子棋棋盘">
-        <div class="top-bar">
-          <div>
+        <header class="game-header">
+          <div class="game-heading">
             <h1>五子棋</h1>
             <p id="mode-status" class="mode-status">模式：双人对战</p>
             <p id="status" class="status" aria-live="polite">Loading...</p>
-            <p id="timer" class="timer">黑棋 00:00　白棋 00:00</p>
+            <p id="timer" class="timer sr-only">黑棋 00:00　白棋 00:00</p>
           </div>
           <div class="controls">
             <div class="mode-actions" role="group" aria-label="选择对战模式">
@@ -50,6 +50,34 @@
               <button id="reset-button" type="button">重新开始</button>
             </div>
           </div>
+        </header>
+
+        <div class="game-table">
+          <aside id="black-player-card" class="player-card black-player" aria-label="黑方信息">
+            <span class="player-stone player-stone-black" aria-hidden="true"></span>
+            <div class="player-card-copy">
+              <p class="player-color">黑方</p>
+              <h2 id="black-role" class="player-role">玩家一</h2>
+              <p id="black-state" class="player-state">等待开始</p>
+            </div>
+            <time id="black-time" class="player-time">00:00</time>
+          </aside>
+
+          <div class="board-stage">
+            <p class="orientation-hint">横屏使用可获得更大的棋盘和更准确的落子体验。</p>
+            <div id="board" class="board" aria-label="15×15 五子棋棋盘"></div>
+            <p id="message" class="message" role="status" aria-live="polite"></p>
+          </div>
+
+          <aside id="white-player-card" class="player-card white-player" aria-label="白方信息">
+            <span class="player-stone player-stone-white" aria-hidden="true"></span>
+            <div class="player-card-copy">
+              <p class="player-color">白方</p>
+              <h2 id="white-role" class="player-role">玩家二</h2>
+              <p id="white-state" class="player-state">等待开始</p>
+            </div>
+            <time id="white-time" class="player-time">00:00</time>
+          </aside>
         </div>
 
         <section class="online-entry" aria-labelledby="online-entry-title">
@@ -61,9 +89,6 @@
           <button id="create-room-button" class="primary-button" type="button">创建私人房间</button>
         </section>
 
-        <p class="orientation-hint">横屏使用可获得更大的棋盘和更准确的落子体验。</p>
-        <div id="board" class="board" aria-label="15×15 五子棋棋盘"></div>
-        <p id="message" class="message" role="status" aria-live="polite"></p>
         <details id="ai-debug-panel" class="ai-debug-panel" hidden>
           <summary>AI 调试信息</summary>
           <p id="ai-debug-summary" class="ai-debug-summary">尚无搜索数据</p>

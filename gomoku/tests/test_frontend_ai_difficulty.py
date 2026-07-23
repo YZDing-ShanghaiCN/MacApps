@@ -48,3 +48,17 @@ def test_frontend_confirms_destructive_setting_changes_and_shows_candidates() ->
     assert 'id="ai-debug-candidates"' in html
     assert "decision?.candidates" in javascript
     assert "普通 AI 思考中…" not in javascript
+
+
+def test_frontend_places_black_and_white_players_around_the_board() -> None:
+    html = (PROJECT_ROOT / "frontend" / "index.html").read_text()
+    stylesheet = (PROJECT_ROOT / "frontend" / "style.css").read_text()
+    javascript = (PROJECT_ROOT / "frontend" / "main.js").read_text()
+
+    black_index = html.index('id="black-player-card"')
+    board_index = html.index('id="board"')
+    white_index = html.index('id="white-player-card"')
+    assert black_index < board_index < white_index
+    assert ".game-table" in stylesheet
+    assert "grid-template-columns: minmax(140px, 180px) auto" in stylesheet
+    assert "updatePlayerCards(state)" in javascript

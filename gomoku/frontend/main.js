@@ -2,6 +2,14 @@ const boardElement = document.querySelector("#board");
 const modeStatusElement = document.querySelector("#mode-status");
 const statusElement = document.querySelector("#status");
 const timerElement = document.querySelector("#timer");
+const blackPlayerCard = document.querySelector("#black-player-card");
+const whitePlayerCard = document.querySelector("#white-player-card");
+const blackRoleElement = document.querySelector("#black-role");
+const whiteRoleElement = document.querySelector("#white-role");
+const blackStateElement = document.querySelector("#black-state");
+const whiteStateElement = document.querySelector("#white-state");
+const blackTimeElement = document.querySelector("#black-time");
+const whiteTimeElement = document.querySelector("#white-time");
 const messageElement = document.querySelector("#message");
 const modeLocalButton = document.querySelector("#mode-local-button");
 const modeAiButton = document.querySelector("#mode-ai-button");
@@ -235,10 +243,50 @@ function displayedTime(state, color) {
 }
 
 function updateTimer(state) {
-  timerElement.textContent = [
-    `黑棋 ${formatDuration(displayedTime(state, "black"))}`,
-    `白棋 ${formatDuration(displayedTime(state, "white"))}`,
-  ].join("　");
+  const blackTime = formatDuration(displayedTime(state, "black"));
+  const whiteTime = formatDuration(displayedTime(state, "white"));
+  blackTimeElement.textContent = blackTime;
+  whiteTimeElement.textContent = whiteTime;
+  timerElement.textContent = `黑棋 ${blackTime}　白棋 ${whiteTime}`;
+}
+
+function updatePlayerCards(state) {
+  const aiMode = state.mode === "vs_ai";
+  const difficulty = DIFFICULTY_LABELS[state.ai_difficulty] || "AI";
+  if (aiMode) {
+    blackRoleElement.textContent = state.ai_player === 1 ? `${difficulty} AI` : "你";
+    whiteRoleElement.textContent = state.ai_player === 2 ? `${difficulty} AI` : "你";
+  } else {
+    blackRoleElement.textContent = "玩家一";
+    whiteRoleElement.textContent = "玩家二";
+  }
+
+  for (const [card, stateElement, player] of [
+    [blackPlayerCard, blackStateElement, 1],
+    [whitePlayerCard, whiteStateElement, 2],
+  ]) {
+    const active = state.timer_running && !state.game_over && state.current_player === player;
+    const winner = state.game_over && state.winner === player;
+    const thinking = state.ai_thinking && state.ai_player === player;
+    card.classList.toggle("is-active", active);
+    card.classList.toggle("is-winner", winner);
+    card.classList.toggle("is-thinking", thinking);
+    card.setAttribute("aria-current", active ? "true" : "false");
+
+    if (winner) {
+      stateElement.textContent = "胜方";
+    } else if (thinking) {
+      stateElement.textContent = "思考中…";
+    } else if (state.game_over) {
+      stateElement.textContent = "本局结束";
+    } else if (!state.timer_running) {
+      stateElement.textContent = "等待开始";
+    } else if (active) {
+      stateElement.textContent = "行棋中";
+    } else {
+      stateElement.textContent = "等待对方";
+    }
+  }
 }
 
 function renderBoard(state) {
@@ -360,6 +408,7 @@ function render(state) {
   updateMode(state);
   updateStatus(state);
   updateTimer(state);
+  updatePlayerCards(state);
   renderBoard(state);
   updateResultDialog(state);
   updateAiDebug(state);
