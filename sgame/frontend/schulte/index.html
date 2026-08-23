@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>舒尔特方格 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="按 1 到 25 的顺序尽快点击数字，训练专注力与视觉搜索。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.0" />
+    <link rel="stylesheet" href="/static/schulte/schulte.css?v=0.1.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>舒尔特方格</h1>
+      </header>
+      <section class="game-panel">
+        <div class="status-bar">
+          <span class="status-item">用时 <strong id="timer">0.0s</strong></span>
+          <span class="status-item">下一个 <strong id="next-number" class="value-accent">1</strong></span>
+          <span class="status-item">错误 <strong id="mistakes">0</strong></span>
+          <span class="status-item">最佳 <strong id="best">--</strong></span>
+          <button id="restart-button" type="button">重新开始</button>
+        </div>
+        <div id="grid" class="schulte-grid" aria-label="舒尔特方格"></div>
+        <p id="result" class="result" hidden></p>
+        <p class="hint">
+          按 1 到 25 的顺序尽快点击所有数字。第一次点击开始计时；点错数字会计入错误次数。
+        </p>
+      </section>
+    </main>
+    <script src="/static/schulte/schulte.js?v=0.1.0"></script>
+  </body>
+</html>

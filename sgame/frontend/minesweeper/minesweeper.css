@@ -1,0 +1,98 @@
+:root {
+  --ms-cell-size: 30px;
+}
+
+.difficulty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.board-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.board {
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  margin: 0 auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ms-cell {
+  width: var(--ms-cell-size);
+  height: var(--ms-cell-size);
+  padding: 0;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--ms-cell-size) * 0.52);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+.ms-cell.revealed {
+  background: #12162a;
+  border-color: #20263f;
+  cursor: default;
+}
+
+.ms-cell.flagged {
+  color: var(--accent);
+}
+
+.ms-cell.mine.revealed {
+  background: #3a2030;
+  border-color: var(--danger);
+}
+
+.ms-cell.exploded {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.ms-cell.wrong-flag {
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.ms-cell.num-1 { color: #6ab7ff; }
+.ms-cell.num-2 { color: #57d386; }
+.ms-cell.num-3 { color: #ff8a80; }
+.ms-cell.num-4 { color: #b388ff; }
+.ms-cell.num-5 { color: #ffb74d; }
+.ms-cell.num-6 { color: #4dd0e1; }
+.ms-cell.num-7 { color: #f48fb1; }
+.ms-cell.num-8 { color: #cfd8dc; }
+
+.face {
+  font-size: 1.2rem;
+  padding: 6px 12px;
+}
+
+.message {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 1.05rem;
+  min-height: 1.4em;
+}
+
+.message.win {
+  color: var(--good);
+}
+
+.message.lose {
+  color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  :root {
+    --ms-cell-size: 26px;
+  }
+}

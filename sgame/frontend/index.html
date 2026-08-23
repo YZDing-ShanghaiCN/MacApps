@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgame · 小游戏合集</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="舒尔特方格、扫雷、吃豆人——三个纯前端小游戏。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="portal-header">
+        <h1><span class="accent">sgame</span> · 小游戏合集</h1>
+        <p class="portal-subtitle">三个纯前端小游戏，点开即玩。</p>
+      </header>
+      <section class="game-grid" aria-label="游戏列表">
+        <a class="game-card" href="/schulte">
+          <span class="game-card-icon" aria-hidden="true">🔢</span>
+          <span class="game-card-body">
+            <span class="game-card-title">舒尔特方格</span>
+            <span class="game-card-desc">
+              按 1 到 25 的顺序尽快点击数字，训练专注力与视觉搜索。
+            </span>
+          </span>
+        </a>
+        <a class="game-card" href="/minesweeper">
+          <span class="game-card-icon" aria-hidden="true">💣</span>
+          <span class="game-card-body">
+            <span class="game-card-title">扫雷</span>
+            <span class="game-card-desc">
+              避开地雷翻开所有安全格，支持初级、中级、高级三种难度。
+            </span>
+          </span>
+        </a>
+        <a class="game-card" href="/pacman">
+          <span class="game-card-icon" aria-hidden="true">👻</span>
+          <span class="game-card-body">
+            <span class="game-card-title">吃豆人</span>
+            <span class="game-card-desc">
+              吃掉迷宫里所有的豆子，小心幽灵；能量豆可以让你反击。
+            </span>
+          </span>
+        </a>
+      </section>
+      <footer class="portal-footer">sgame v0.1.0 · FastAPI + 原生 JS</footer>
+    </main>
+    <script src="/static/pwa.js?v=0.1.0"></script>
+  </body>
+</html>
