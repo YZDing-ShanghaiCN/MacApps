@@ -179,7 +179,7 @@ def test_pwa_assets_are_served() -> None:
     assert manifest.status_code == 200
     assert "私人五子棋" in manifest.text
     assert service_worker.status_code == 200
-    assert "gomoku-shell-v0.3.4" in service_worker.text
+    assert "gomoku-shell-v0.3.5" in service_worker.text
 
 
 def test_move_returns_updated_state() -> None:
