@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>扫雷 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="避开地雷翻开所有安全格，支持初级、中级、高级三种难度。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.0" />
+    <link rel="stylesheet" href="/static/minesweeper/minesweeper.css?v=0.1.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>扫雷</h1>
+      </header>
+      <section class="game-panel">
+        <div class="status-bar">
+          <span class="status-item">剩余雷数 <strong id="mine-counter" class="value-accent">10</strong></span>
+          <span class="status-item">用时 <strong id="timer">0</strong></span>
+          <button id="face-button" type="button" class="face" title="重新开始">🙂</button>
+          <button id="flag-mode-button" type="button" aria-pressed="false">🚩 插旗模式</button>
+        </div>
+        <div class="difficulty-actions" role="group" aria-label="选择难度">
+          <button id="difficulty-beginner" type="button" class="selected">初级 9×9</button>
+          <button id="difficulty-intermediate" type="button">中级 16×16</button>
+          <button id="difficulty-expert" type="button">高级 16×30</button>
+        </div>
+        <div class="board-wrap">
+          <div id="board" class="board" aria-label="扫雷棋盘"></div>
+        </div>
+        <p id="message" class="message" aria-live="polite"></p>
+        <p class="hint">
+          左键翻开格子，右键（或开启插旗模式、手机长按）插旗。
+          点击已翻开的数字且周围旗数匹配时，可一次翻开周围格子。第一次点击保证安全。
+        </p>
+      </section>
+    </main>
+    <script src="/static/minesweeper/minesweeper.js?v=0.1.0"></script>
+  </body>
+</html>

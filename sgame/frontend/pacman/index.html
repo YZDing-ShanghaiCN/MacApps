@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>吃豆人 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="吃掉迷宫里所有的豆子，小心幽灵；能量豆可以让你反击。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.0" />
+    <link rel="stylesheet" href="/static/pacman/pacman.css?v=0.1.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>吃豆人</h1>
+      </header>
+      <section class="game-panel">
+        <div class="status-bar">
+          <span class="status-item">得分 <strong id="score" class="value-accent">0</strong></span>
+          <span class="status-item">最高分 <strong id="high-score">0</strong></span>
+          <span class="status-item">关卡 <strong id="level">1</strong></span>
+          <span class="status-item">生命 <span id="lives"></span></span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="game"></canvas>
+          <div id="overlay" class="overlay" hidden>
+            <p id="overlay-title">GAME OVER</p>
+            <p id="overlay-detail"></p>
+            <button id="overlay-button" type="button" class="primary">再来一局</button>
+          </div>
+        </div>
+        <p class="hint">
+          方向键 / WASD 移动，手机上在画面内滑动；吃到能量豆后可以反击幽灵，
+          吃完所有豆子进入下一关。
+        </p>
+      </section>
+    </main>
+    <script src="/static/pacman/pacman.js?v=0.1.0"></script>
+  </body>
+</html>

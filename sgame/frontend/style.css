@@ -1,0 +1,246 @@
+:root {
+  --bg: #101322;
+  --bg-glow: #182040;
+  --panel: #191d31;
+  --panel-border: #2a3153;
+  --text: #eceaf4;
+  --muted: #9aa3bf;
+  --accent: #ffcc00;
+  --accent-strong: #ffd633;
+  --good: #57d386;
+  --danger: #ff5f66;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 0%, var(--bg-glow) 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    system-ui, sans-serif;
+}
+
+.app-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Portal */
+
+.portal-header {
+  text-align: center;
+  padding: 24px 0 8px;
+}
+
+.portal-header h1 {
+  margin: 0;
+  font-size: 2.2rem;
+  letter-spacing: 0.08em;
+}
+
+.portal-header h1 .accent {
+  color: var(--accent);
+}
+
+.portal-subtitle {
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.game-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.game-card:hover,
+.game-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.game-card-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 204, 0, 0.12);
+  font-size: 1.6rem;
+}
+
+.game-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-card-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.game-card-desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.portal-footer {
+  margin-top: 36px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Shared game layout */
+
+.game-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.game-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.back-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+.game-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin-bottom: 14px;
+}
+
+.status-item {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.status-item strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-item .value-accent {
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: #232842;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+button:hover,
+button:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1d1a05;
+  font-weight: 600;
+}
+
+button.primary:hover,
+button.primary:focus-visible {
+  background: var(--accent-strong);
+}
+
+button.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .app-shell {
+    padding: 16px 10px 36px;
+  }
+
+  .portal-header h1 {
+    font-size: 1.7rem;
+  }
+
+  .game-panel {
+    padding: 12px;
+  }
+}

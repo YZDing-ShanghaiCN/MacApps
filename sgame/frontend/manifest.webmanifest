@@ -1,0 +1,17 @@
+{
+  "name": "sgame 小游戏合集",
+  "short_name": "sgame",
+  "description": "舒尔特方格、扫雷、吃豆人——三个纯前端小游戏。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101322",
+  "theme_color": "#101322",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
