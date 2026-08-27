@@ -3,7 +3,7 @@
 import os
 
 APP_NAME = "sgame"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.2"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8001
@@ -22,7 +22,7 @@ GAMES = (
     {
         "id": GAME_SCHULTE,
         "title": "舒尔特方格",
-        "description": "按 1 到 25 的顺序尽快点击数字，训练专注力与视觉搜索。",
+        "description": "3×3、4×4、5×5 三种模式，按顺序尽快点击数字，训练专注力与视觉搜索。",
     },
     {
         "id": GAME_MINESWEEPER,

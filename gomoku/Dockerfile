@@ -2,11 +2,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY gomoku/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src ./src
-COPY frontend ./frontend
+COPY src/gomoku ./src/gomoku
+COPY gomoku/frontend ./frontend
 
 ENV PYTHONPATH=/app/src
 EXPOSE 8000

@@ -1,10 +1,10 @@
 :root {
   --bg: #101322;
-  --bg-glow: #182040;
-  --panel: #191d31;
-  --panel-border: #2a3153;
+  --bg-glow: #1d2a55;
+  --panel: #1f2544;
+  --panel-border: #3d477a;
   --text: #eceaf4;
-  --muted: #9aa3bf;
+  --muted: #b3bcda;
   --accent: #ffcc00;
   --accent-strong: #ffd633;
   --good: #57d386;
@@ -188,7 +188,7 @@ body {
 button {
   font: inherit;
   color: var(--text);
-  background: #232842;
+  background: #2b3358;
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   padding: 8px 16px;

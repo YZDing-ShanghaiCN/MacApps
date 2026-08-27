@@ -6,7 +6,7 @@ import sys
 import pytest
 
 
-SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from gomoku.ai.normal_ai import NormalAI

@@ -27,6 +27,11 @@
   text-align: center;
 }
 
+/* hidden must win over display:flex, else overlay shows on load */
+.overlay[hidden] {
+  display: none;
+}
+
 #overlay-title {
   margin: 0;
   font-size: 1.7rem;

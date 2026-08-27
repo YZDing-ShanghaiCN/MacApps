@@ -4,7 +4,7 @@
 
 ## 安装
 
-以下命令默认在 `apps/` 目录执行：
+以下命令默认在 `MacApps/` 目录执行：
 
 ```bash
 conda activate gomoku
