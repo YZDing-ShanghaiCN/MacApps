@@ -1,4 +1,4 @@
-# sgame
+V# sgame
 
 一个纯前端小游戏合集，包含舒尔特方格、扫雷和吃豆人。
 
@@ -34,7 +34,8 @@ python sgame/scripts/run_quick_tunnel.py
 
 ### 舒尔特方格
 
-5×5 方格中随机分布 1 到 25，按顺序尽快点击所有数字。第一次点击开始计时，点错会记录错误次数。完成时显示用时和错误次数，最佳成绩保存在浏览器本地存储中。
+提供 3×3（1-9）、4×4（1-16）、5×5（1-25）三种模式，方格中随机分布数字，按顺序尽快点击所有数字。
+第一次点击开始计时，点错会记录错误次数。完成时显示用时和错误次数，每种模式的最佳成绩分别保存在浏览器本地存储中。
 
 ### 扫雷
 
@@ -58,7 +59,9 @@ pytest sgame/tests/
 
 ## Docker
 
+在仓库根目录（`MacApps/`）执行：
+
 ```bash
-docker build -t sgame sgame/
+docker build -f sgame/Dockerfile -t sgame .
 docker run -d -p 8001:8001 sgame
 ```

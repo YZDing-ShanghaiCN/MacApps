@@ -1,19 +1,19 @@
-const CACHE_NAME = "sgame-shell-v0.1.0";
+const CACHE_NAME = "sgame-shell-v0.1.2";
 const APP_SHELL = [
   "/",
-  "/static/style.css?v=0.1.0",
-  "/static/pwa.js?v=0.1.0",
+  "/static/style.css?v=0.1.1",
+  "/static/pwa.js?v=0.1.1",
   "/static/manifest.webmanifest",
   "/static/icon.svg",
   "/schulte",
-  "/static/schulte/schulte.css?v=0.1.0",
-  "/static/schulte/schulte.js?v=0.1.0",
+  "/static/schulte/schulte.css?v=0.1.1",
+  "/static/schulte/schulte.js?v=0.1.1",
   "/minesweeper",
-  "/static/minesweeper/minesweeper.css?v=0.1.0",
-  "/static/minesweeper/minesweeper.js?v=0.1.0",
+  "/static/minesweeper/minesweeper.css?v=0.1.1",
+  "/static/minesweeper/minesweeper.js?v=0.1.1",
   "/pacman",
-  "/static/pacman/pacman.css?v=0.1.0",
-  "/static/pacman/pacman.js?v=0.1.0",
+  "/static/pacman/pacman.css?v=0.1.2",
+  "/static/pacman/pacman.js?v=0.1.1",
 ];
 
 self.addEventListener("install", (event) => {

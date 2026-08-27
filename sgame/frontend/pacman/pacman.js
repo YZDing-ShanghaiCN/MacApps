@@ -34,18 +34,18 @@
   const DOOR_ROW = 8;
   const EXIT_ROW = 7;
   const DOOR_COL = 9;
-  const PACMAN_START = { row: 11, col: 9 };
+  const PACMAN_START = { row: 15, col: 9 };
 
   const PACMAN_SPEED = 6.5;
-  const GHOST_SPEED = 6.0;
+  const GHOST_SPEED = 4.9;
   const FRIGHT_SPEED = 3.8;
   const EYES_SPEED = 11;
-  const READY_DURATION = 1.6;
+  const READY_DURATION = 2.2;
   const DEATH_DURATION = 1.3;
   const CLEAR_DURATION = 2.0;
-  const RELEASE_TIMES = { pinky: 1, inky: 4, clyde: 7 };
+  const RELEASE_TIMES = { pinky: 3.5, inky: 7, clyde: 11 };
   const MODE_SCHEDULE = [
-    [7, "scatter"],
+    [9, "scatter"],
     [20, "chase"],
     [7, "scatter"],
     [20, "chase"],
@@ -509,7 +509,7 @@
       }
       const gpos = entityPos(ghost);
       const distSq = (gpos.x - pos.x) ** 2 + (gpos.y - pos.y) ** 2;
-      if (distSq > 0.36) {
+      if (distSq > 0.25) {
         continue;
       }
       if (ghost.state === "eyes") {

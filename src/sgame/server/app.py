@@ -14,30 +14,34 @@ app = FastAPI(
     openapi_url="/openapi.json" if config.ENABLE_API_DOCS else None,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[3] / "sgame"
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
+def html_response(path: Path) -> FileResponse:
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/")
 def read_root() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return html_response(FRONTEND_DIR / "index.html")
 
 
 @app.get("/schulte")
 def read_schulte() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "schulte" / "index.html")
+    return html_response(FRONTEND_DIR / "schulte" / "index.html")
 
 
 @app.get("/minesweeper")
 def read_minesweeper() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "minesweeper" / "index.html")
+    return html_response(FRONTEND_DIR / "minesweeper" / "index.html")
 
 
 @app.get("/pacman")
 def read_pacman() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "pacman" / "index.html")
+    return html_response(FRONTEND_DIR / "pacman" / "index.html")
 
 
 @app.get("/sw.js")
@@ -45,6 +49,7 @@ def read_service_worker() -> FileResponse:
     return FileResponse(
         FRONTEND_DIR / "sw.js",
         media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
     )
 
 

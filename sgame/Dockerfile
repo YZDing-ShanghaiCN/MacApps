@@ -2,11 +2,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY sgame/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src ./src
-COPY frontend ./frontend
+COPY src/sgame ./src/sgame
+COPY sgame/frontend ./frontend
 
 ENV PYTHONPATH=/app/src
 EXPOSE 8001
