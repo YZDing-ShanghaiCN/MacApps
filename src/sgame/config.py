@@ -3,7 +3,7 @@
 import os
 
 APP_NAME = "sgame"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8001
@@ -17,6 +17,7 @@ ENABLE_API_DOCS = os.getenv("SGAME_ENABLE_API_DOCS", "").lower() in {
 GAME_SCHULTE = "schulte"
 GAME_MINESWEEPER = "minesweeper"
 GAME_PACMAN = "pacman"
+GAME_2048 = "2048"
 
 GAMES = (
     {
@@ -33,6 +34,11 @@ GAMES = (
         "id": GAME_PACMAN,
         "title": "吃豆人",
         "description": "吃掉迷宫里所有的豆子，小心幽灵；能量豆可以让你反击。",
+    },
+    {
+        "id": GAME_2048,
+        "title": "2048",
+        "description": "滑动合并相同数字，合成 2048，支持键盘与触屏滑动。",
     },
 )
 

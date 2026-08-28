@@ -1,0 +1,189 @@
+.board-wrap {
+  position: relative;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.board {
+  --tile-size: 96px;
+  --gap: 10px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, var(--tile-size));
+  grid-template-rows: repeat(4, var(--tile-size));
+  gap: var(--gap);
+  padding: var(--gap);
+  border-radius: 10px;
+  background: #232a4d;
+  touch-action: none;
+  user-select: none;
+}
+
+.cell {
+  border-radius: 8px;
+  background: rgba(5, 6, 15, 0.4);
+}
+
+.tile-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  border-radius: 8px;
+  background: #cdc1b4;
+  color: #776e65;
+  font-weight: 700;
+  font-size: calc(var(--tile-size) * 0.42);
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.12s ease;
+  will-change: transform;
+}
+
+.v-2 {
+  background: #eee4da;
+}
+
+.v-4 {
+  background: #ede0c8;
+}
+
+.v-8 {
+  background: #f2b179;
+  color: #f9f6f2;
+}
+
+.v-16 {
+  background: #f59563;
+  color: #f9f6f2;
+}
+
+.v-32 {
+  background: #f67c5f;
+  color: #f9f6f2;
+}
+
+.v-64 {
+  background: #f65e3b;
+  color: #f9f6f2;
+}
+
+.v-128,
+.v-256,
+.v-512 {
+  background: #edcf72;
+  color: #f9f6f2;
+  font-size: calc(var(--tile-size) * 0.34);
+}
+
+.v-256 {
+  background: #edcc61;
+}
+
+.v-512 {
+  background: #edc850;
+}
+
+.v-1024,
+.v-2048,
+.v-super {
+  color: #f9f6f2;
+  font-size: calc(var(--tile-size) * 0.28);
+}
+
+.v-1024 {
+  background: #edc53f;
+}
+
+.v-2048 {
+  background: #edc22e;
+}
+
+.v-super {
+  background: #3c3a32;
+}
+
+@keyframes tile-pop {
+  0% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.18;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.tile.pop {
+  animation: tile-pop 0.18s ease;
+}
+
+@keyframes tile-new {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+.tile.new {
+  animation: tile-new 0.16s ease-out;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 10px;
+  background: rgba(16, 19, 34, 0.88);
+  text-align: center;
+}
+
+/* hidden must win over display:flex, else overlay shows on load */
+.overlay[hidden] {
+  display: none;
+}
+
+#overlay-title {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+#overlay-detail {
+  margin: 0;
+  color: var(--muted);
+}
+
+.overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .board {
+    --tile-size: 68px;
+    --gap: 8px;
+  }
+}
