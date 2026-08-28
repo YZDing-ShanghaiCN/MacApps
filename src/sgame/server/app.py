@@ -44,6 +44,11 @@ def read_pacman() -> FileResponse:
     return html_response(FRONTEND_DIR / "pacman" / "index.html")
 
 
+@app.get("/2048")
+def read_2048() -> FileResponse:
+    return html_response(FRONTEND_DIR / "2048" / "index.html")
+
+
 @app.get("/sw.js")
 def read_service_worker() -> FileResponse:
     return FileResponse(

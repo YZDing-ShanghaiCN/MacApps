@@ -30,6 +30,7 @@ def test_portal_page_contains_game_links() -> None:
     assert 'href="/schulte"' in text
     assert 'href="/minesweeper"' in text
     assert 'href="/pacman"' in text
+    assert 'href="/2048"' in text
 
 
 def test_schulte_page_served() -> None:
@@ -54,6 +55,14 @@ def test_pacman_page_served() -> None:
     assert response.status_code == 200
     assert "吃豆人" in response.text
     assert '<canvas id="game"' in response.text
+
+
+def test_2048_page_served() -> None:
+    response = client.get("/2048")
+
+    assert response.status_code == 200
+    assert "2048" in response.text
+    assert '<div id="board"' in response.text
 
 
 def test_trailing_slash_redirects() -> None:
@@ -86,6 +95,13 @@ def test_static_minesweeper_js_served() -> None:
 
 def test_static_pacman_js_served() -> None:
     response = client.get("/static/pacman/pacman.js")
+
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+
+
+def test_static_2048_js_served() -> None:
+    response = client.get("/static/2048/2048.js")
 
     assert response.status_code == 200
     assert "javascript" in response.headers["content-type"]

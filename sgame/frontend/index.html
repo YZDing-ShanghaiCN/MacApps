@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>sgame · 小游戏合集</title>
     <meta name="theme-color" content="#101322" />
-    <meta name="description" content="舒尔特方格、扫雷、吃豆人——三个纯前端小游戏。" />
+    <meta name="description" content="舒尔特方格、扫雷、吃豆人、2048——四个纯前端小游戏。" />
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
@@ -14,7 +14,7 @@
     <main class="app-shell">
       <header class="portal-header">
         <h1><span class="accent">sgame</span> · 小游戏合集</h1>
-        <p class="portal-subtitle">三个纯前端小游戏，点开即玩。</p>
+        <p class="portal-subtitle">四个纯前端小游戏，点开即玩。</p>
       </header>
       <section class="game-grid" aria-label="游戏列表">
         <a class="game-card" href="/schulte">
@@ -44,8 +44,17 @@
             </span>
           </span>
         </a>
+        <a class="game-card" href="/2048">
+          <span class="game-card-icon" aria-hidden="true">➕</span>
+          <span class="game-card-body">
+            <span class="game-card-title">2048</span>
+            <span class="game-card-desc">
+              滑动合并相同数字，合成 2048，支持键盘与触屏滑动。
+            </span>
+          </span>
+        </a>
       </section>
-      <footer class="portal-footer">sgame v0.1.2 · FastAPI + 原生 JS</footer>
+      <footer class="portal-footer">sgame v0.1.3 · FastAPI + 原生 JS</footer>
     </main>
     <script src="/static/pwa.js?v=0.1.1"></script>
   </body>
