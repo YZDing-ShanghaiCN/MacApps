@@ -49,6 +49,11 @@ def read_2048() -> FileResponse:
     return html_response(FRONTEND_DIR / "2048" / "index.html")
 
 
+@app.get("/tetris")
+def read_tetris() -> FileResponse:
+    return html_response(FRONTEND_DIR / "tetris" / "index.html")
+
+
 @app.get("/sw.js")
 def read_service_worker() -> FileResponse:
     return FileResponse(

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>俄罗斯方块 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="经典俄罗斯方块：A/D 移动，鼠标左键旋转，按住 Shift 加速下落；手机端提供 4 个屏幕按钮。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
+    <link rel="stylesheet" href="/static/tetris/tetris.css?v=0.1.1" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>俄罗斯方块</h1>
+      </header>
+      <section class="game-panel">
+        <div class="status-bar">
+          <span class="status-item">得分 <strong id="score" class="value-accent">0</strong></span>
+          <span class="status-item">最高分 <strong id="best">0</strong></span>
+          <span class="status-item">关卡 <strong id="level">1</strong></span>
+          <span class="status-item next-item">下一块 <canvas id="next-panel" width="120" height="120"></canvas></span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="game"></canvas>
+          <div id="overlay" class="overlay">
+            <p id="overlay-title">俄罗斯方块</p>
+            <p id="overlay-detail"></p>
+            <button id="overlay-button" type="button" class="primary">开始游戏</button>
+          </div>
+        </div>
+        <div class="touch-controls" id="touch-controls">
+          <button type="button" id="btn-left" class="touch-btn" aria-label="左移">◀</button>
+          <button type="button" id="btn-right" class="touch-btn" aria-label="右移">▶</button>
+          <button type="button" id="btn-rotate" class="touch-btn" aria-label="旋转">⟳</button>
+          <button type="button" id="btn-drop" class="touch-btn" aria-label="加速下落">⬇</button>
+        </div>
+        <p class="hint">
+          A / D 左右移动，鼠标左键旋转方块，按住左 Shift 加速下落。<br />
+          手机上使用屏幕下方的 4 个按钮操作（左右移动 / 旋转 / 加速）。<br />
+          Move with A/D, click to rotate, hold Left Shift to drop faster; use the 4 on-screen buttons on mobile.
+        </p>
+      </section>
+    </main>
+    <script src="/static/tetris/tetris.js?v=0.1.1"></script>
+  </body>
+</html>

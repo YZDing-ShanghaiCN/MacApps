@@ -3,7 +3,7 @@
 import os
 
 APP_NAME = "sgame"
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.4"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8001
@@ -18,6 +18,7 @@ GAME_SCHULTE = "schulte"
 GAME_MINESWEEPER = "minesweeper"
 GAME_PACMAN = "pacman"
 GAME_2048 = "2048"
+GAME_TETRIS = "tetris"
 
 GAMES = (
     {
@@ -39,6 +40,11 @@ GAMES = (
         "id": GAME_2048,
         "title": "2048",
         "description": "滑动合并相同数字，合成 2048，支持键盘与触屏滑动。",
+    },
+    {
+        "id": GAME_TETRIS,
+        "title": "俄罗斯方块",
+        "description": "经典落下式拼块游戏，消除整行得分，支持键盘与触屏按钮操作。",
     },
 )
 

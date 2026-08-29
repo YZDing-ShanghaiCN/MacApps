@@ -1,7 +1,41 @@
 (() => {
   "use strict";
 
-  const MAZE = [
+  const L1_MAZE = [
+    "#############",
+    "#...........#",
+    "#o##.###.##o#",
+    "#...........#",
+    "#.##.....##.#",
+    "#.#..#-#..#.#",
+    "#....#G#....#",
+    "#....###....#",
+    "#...........#",
+    "#.##.....##.#",
+    "#...........#",
+    "#...........#",
+    "#############",
+  ];
+
+  const L2_MAZE = [
+    "###############",
+    "#.............#",
+    "#o##..###..##o#",
+    "#.............#",
+    "#.##..###..##.#",
+    "#.##.......##.#",
+    "#.##.##-##.##.#",
+    "#.##..#GG#....#",
+    "#....####.....#",
+    "#.##.......##.#",
+    "#.............#",
+    "#.##..###..##.#",
+    "#o##..###..##o#",
+    "#.............#",
+    "###############",
+  ];
+
+  const L3_MAZE = [
     "###################",
     "#........#........#",
     "#o##.###.#.###.##o#",
@@ -25,16 +59,35 @@
     "###################",
   ];
 
-  const ROWS = MAZE.length;
-  const COLS = MAZE[0].length;
+  const L4_MAZE = [
+    "#########################",
+    "#.......................#",
+    "#o##.###.##.#.##.###.##o#",
+    "#.......................#",
+    "#.##......#.#.#......##.#",
+    "#.....#.....#.....#.....#",
+    "#.#####.#####.#####.#####",
+    "#.....#.....#.....#.....#",
+    "#.......................#",
+    "#.......................#",
+    "#.########.#--##.######.#",
+    "#..........#GGG#........#",
+    "#..........#####........#",
+    "#.##.##.....#.....##.##.#",
+    "#.##.##.###.#.###.##.##.#",
+    "#.......................#",
+    "#.#####.#####.#####.#####",
+    "#.......................#",
+    "#.##.##.###.#.###.##.##.#",
+    "#.##.##.....#.....##.##.#",
+    "#o##.###.##.#.##.###.##o#",
+    "#.......................#",
+    "#########################",
+  ];
+
   const TILE = 24;
   const HIGH_SCORE_KEY = "sgame-pacman-highscore";
-
-  const HOUSE_ROW = 9;
-  const DOOR_ROW = 8;
-  const EXIT_ROW = 7;
-  const DOOR_COL = 9;
-  const PACMAN_START = { row: 15, col: 9 };
+  const FRIGHT_DURATION = 6.5;
 
   const PACMAN_SPEED = 6.5;
   const GHOST_SPEED = 4.9;
@@ -43,7 +96,6 @@
   const READY_DURATION = 2.2;
   const DEATH_DURATION = 1.3;
   const CLEAR_DURATION = 2.0;
-  const RELEASE_TIMES = { pinky: 3.5, inky: 7, clyde: 11 };
   const MODE_SCHEDULE = [
     [9, "scatter"],
     [20, "chase"],
@@ -62,23 +114,70 @@
   };
   const DIR_ORDER = [DIRS.up, DIRS.left, DIRS.down, DIRS.right];
 
-  const GHOST_DEFS = [
-    { name: "blinky", color: "#ff0000", corner: { row: 1, col: 17 }, start: { row: EXIT_ROW, col: DOOR_COL } },
-    { name: "pinky", color: "#ffb8ff", corner: { row: 1, col: 1 }, start: { row: HOUSE_ROW, col: 8 } },
-    { name: "inky", color: "#00ffff", corner: { row: 19, col: 1 }, start: { row: HOUSE_ROW, col: 9 } },
-    { name: "clyde", color: "#ffb852", corner: { row: 19, col: 17 }, start: { row: HOUSE_ROW, col: 10 } },
+  const ALL_GHOSTS = {
+    blinky: { name: "blinky", color: "#ff0000" },
+    pinky: { name: "pinky", color: "#ffb8ff" },
+    inky: { name: "inky", color: "#00ffff" },
+    clyde: { name: "clyde", color: "#ffb852" },
+  };
+
+  const LEVELS = [
+    {
+      maze: L1_MAZE,
+      house: { houseRow: 6, doorRow: 5, exitRow: 4, doorCol: 6 },
+      pacmanStart: { row: 9, col: 6 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 11 }, start: { row: 4, col: 6 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 6, col: 6 } },
+      ],
+      releaseTimes: { pinky: 3.5 },
+    },
+    {
+      maze: L2_MAZE,
+      house: { houseRow: 7, doorRow: 6, exitRow: 5, doorCol: 7 },
+      pacmanStart: { row: 9, col: 7 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 13 }, start: { row: 5, col: 7 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 7, col: 7 } },
+        { name: "inky", corner: { row: 13, col: 1 }, start: { row: 7, col: 8 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7 },
+    },
+    {
+      maze: L3_MAZE,
+      house: { houseRow: 9, doorRow: 8, exitRow: 7, doorCol: 9 },
+      pacmanStart: { row: 15, col: 9 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 17 }, start: { row: 7, col: 9 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 9, col: 8 } },
+        { name: "inky", corner: { row: 19, col: 1 }, start: { row: 9, col: 9 } },
+        { name: "clyde", corner: { row: 19, col: 17 }, start: { row: 9, col: 10 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7, clyde: 11 },
+    },
+    {
+      maze: L4_MAZE,
+      house: { houseRow: 11, doorRow: 10, exitRow: 9, doorCol: 12 },
+      pacmanStart: { row: 17, col: 12 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 23 }, start: { row: 9, col: 12 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 11, col: 12 } },
+        { name: "inky", corner: { row: 21, col: 1 }, start: { row: 11, col: 13 } },
+        { name: "clyde", corner: { row: 21, col: 23 }, start: { row: 11, col: 14 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7, clyde: 11 },
+    },
   ];
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
-  canvas.width = COLS * TILE;
-  canvas.height = ROWS * TILE;
 
   const scoreEl = document.getElementById("score");
   const highScoreEl = document.getElementById("high-score");
   const levelEl = document.getElementById("level");
   const livesEl = document.getElementById("lives");
   const overlayEl = document.getElementById("overlay");
+  const overlayTitleEl = document.getElementById("overlay-title");
   const overlayDetailEl = document.getElementById("overlay-detail");
   const overlayButton = document.getElementById("overlay-button");
 
@@ -88,6 +187,10 @@
   let highScore = loadHighScore();
   let lives = 3;
   let level = 1;
+  let activeLevel = 0;
+  let ROWS = 0;
+  let COLS = 0;
+  let eyesField = null;
   let state = "attract";
   let readyTimer = 0;
   let deathTimer = 0;
@@ -115,7 +218,7 @@
     if (row < 0 || row >= ROWS) {
       return "#";
     }
-    return MAZE[row][wrapCol(col)];
+    return LEVELS[activeLevel].maze[row][wrapCol(col)];
   }
 
   function isWall(col, row, allowDoor) {
@@ -130,7 +233,7 @@
   }
 
   function levelSpeedMul() {
-    return 1 + Math.min(level - 1, 8) * 0.04;
+    return 1;
   }
 
   function currentMode() {
@@ -205,7 +308,18 @@
     return dist;
   }
 
-  const eyesField = computeDistanceField(HOUSE_ROW, DOOR_COL);
+  function loadLevel(idx) {
+    activeLevel = idx;
+    const cfg = LEVELS[idx];
+    ROWS = cfg.maze.length;
+    COLS = cfg.maze[0].length;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+    wallCanvas.width = canvas.width;
+    wallCanvas.height = canvas.height;
+    renderWallLayer();
+    eyesField = computeDistanceField(cfg.house.houseRow, cfg.house.doorCol);
+  }
 
   function resetDots() {
     dots = [];
@@ -213,7 +327,7 @@
     for (let row = 0; row < ROWS; row += 1) {
       const line = [];
       for (let col = 0; col < COLS; col += 1) {
-        const ch = MAZE[row][col];
+        const ch = LEVELS[activeLevel].maze[row][col];
         if (ch === ".") {
           line.push(1);
           dotsRemaining += 1;
@@ -229,12 +343,15 @@
   }
 
   function resetPositions() {
-    pacman = makeEntity(PACMAN_START.row, PACMAN_START.col);
+    const cfg = LEVELS[activeLevel];
+    pacman = makeEntity(cfg.pacmanStart.row, cfg.pacmanStart.col);
     pacman.dir = DIRS.left;
     lastDirAngle = Math.PI;
     pendingDir = DIRS.none;
-    ghosts = GHOST_DEFS.map((def) => ({
-      ...def,
+    ghosts = cfg.ghosts.map((def) => ({
+      ...ALL_GHOSTS[def.name],
+      corner: def.corner,
+      start: def.start,
       row: def.start.row,
       col: def.start.col,
       targetRow: def.start.row,
@@ -267,6 +384,7 @@
     score = 0;
     lives = 3;
     level = 1;
+    loadLevel(0);
     overlayEl.hidden = true;
     startLevel();
   }
@@ -303,7 +421,7 @@
       addScore(10);
     } else {
       addScore(50);
-      frightTimer = Math.max(6.5 - (level - 1) * 0.5, 2.5);
+      frightTimer = FRIGHT_DURATION;
       ghostCombo = 0;
     }
     if (dotsRemaining === 0) {
@@ -389,9 +507,10 @@
   }
 
   function updateLeaving(ghost, dt) {
+    const cfg = LEVELS[activeLevel];
     const speed = GHOST_SPEED * levelSpeedMul();
     if (ghost.leavePhase === 0) {
-      const targetX = DOOR_COL + 0.5;
+      const targetX = cfg.house.doorCol + 0.5;
       const step = speed * dt;
       if (Math.abs(ghost.fx - targetX) <= step) {
         ghost.fx = targetX;
@@ -401,15 +520,15 @@
       }
       return;
     }
-    const targetY = EXIT_ROW + 0.5;
+    const targetY = cfg.house.exitRow + 0.5;
     const step = speed * dt;
     if (ghost.fy - targetY <= step) {
       ghost.fy = targetY;
       ghost.state = "active";
-      ghost.row = EXIT_ROW;
-      ghost.col = DOOR_COL;
-      ghost.targetRow = EXIT_ROW;
-      ghost.targetCol = DOOR_COL;
+      ghost.row = cfg.house.exitRow;
+      ghost.col = cfg.house.doorCol;
+      ghost.targetRow = cfg.house.exitRow;
+      ghost.targetCol = cfg.house.doorCol;
       ghost.progress = 1;
       ghost.dir = DIRS.none;
     } else {
@@ -428,14 +547,15 @@
   }
 
   function updateGhost(ghost, dt) {
+    const cfg = LEVELS[activeLevel];
     if (ghost.state === "house") {
       ghost.housePhase += dt * 3;
-      const releaseAt = releaseOverrides.get(ghost) ?? RELEASE_TIMES[ghost.name] ?? 0;
+      const releaseAt = releaseOverrides.get(ghost) ?? cfg.releaseTimes[ghost.name] ?? 0;
       if (lifeClock >= releaseAt) {
         ghost.state = "leaving";
         ghost.leavePhase = 0;
         ghost.fx = ghost.col + 0.5;
-        ghost.fy = HOUSE_ROW + 0.5;
+        ghost.fy = cfg.house.houseRow + 0.5;
       }
       return;
     }
@@ -448,14 +568,14 @@
     if (!arrived) {
       return;
     }
-    if (ghost.state === "eyes" && ghost.row === HOUSE_ROW && ghost.col === DOOR_COL) {
+    if (ghost.state === "eyes" && ghost.row === cfg.house.houseRow && ghost.col === cfg.house.doorCol) {
       ghost.state = "house";
-      ghost.row = HOUSE_ROW;
-      ghost.col = DOOR_COL;
-      ghost.targetRow = HOUSE_ROW;
-      ghost.targetCol = DOOR_COL;
-      ghost.fx = DOOR_COL + 0.5;
-      ghost.fy = HOUSE_ROW + 0.5;
+      ghost.row = cfg.house.houseRow;
+      ghost.col = cfg.house.doorCol;
+      ghost.targetRow = cfg.house.houseRow;
+      ghost.targetCol = cfg.house.doorCol;
+      ghost.fx = cfg.house.doorCol + 0.5;
+      ghost.fy = cfg.house.houseRow + 0.5;
       ghost.progress = 1;
       releaseOverrides.set(ghost, lifeClock + 1.5);
       return;
@@ -531,6 +651,7 @@
     lives -= 1;
     if (lives <= 0) {
       state = "gameover";
+      overlayTitleEl.textContent = "GAME OVER";
       overlayDetailEl.textContent = `得分 ${score} · 最高分 ${highScore} · 关卡 ${level}`;
       overlayEl.hidden = false;
       updateHud();
@@ -544,7 +665,16 @@
   }
 
   function afterLevelClear() {
+    if (level >= LEVELS.length) {
+      state = "victory";
+      overlayTitleEl.textContent = "恭喜通关!";
+      overlayDetailEl.textContent = `得分 ${score} · 最高分 ${highScore} · 4 关全部完成`;
+      overlayEl.hidden = false;
+      updateHud();
+      return;
+    }
     level += 1;
+    loadLevel(level - 1);
     startLevel();
   }
 
@@ -595,13 +725,14 @@
   wallCanvas.height = canvas.height;
 
   function renderWallLayer() {
+    const maze = LEVELS[activeLevel].maze;
     const wctx = wallCanvas.getContext("2d");
     wctx.fillStyle = "#05060f";
     wctx.fillRect(0, 0, wallCanvas.width, wallCanvas.height);
     const inset = 5;
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
-        if (MAZE[row][col] !== "#") {
+        if (maze[row][col] !== "#") {
           continue;
         }
         const x = col * TILE;
@@ -634,7 +765,7 @@
     }
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
-        if (MAZE[row][col] !== "-") {
+        if (maze[row][col] !== "-") {
           continue;
         }
         const x = col * TILE;
@@ -808,7 +939,7 @@
     drawWithWrap((x) => drawPacman(t, x, py), ppos.x * TILE);
 
     if (state === "ready") {
-      drawCenterText("READY!", 13 * TILE + TILE / 2, "#ffcc00", 18);
+      drawCenterText("READY!", canvas.height * 0.62, "#ffcc00", 18);
     }
   }
 
@@ -827,7 +958,7 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.code === "Space" || event.code === "Enter") {
-      if (state === "gameover" || state === "attract") {
+      if (state === "gameover" || state === "attract" || state === "victory") {
         newGame();
         event.preventDefault();
       }
@@ -854,7 +985,7 @@
     event.preventDefault();
     const touch = event.touches[0];
     touchStart = { x: touch.clientX, y: touch.clientY };
-    if (state === "attract" || state === "gameover") {
+    if (state === "attract" || state === "gameover" || state === "victory") {
       newGame();
     }
   }, { passive: false });
@@ -888,7 +1019,7 @@
 
   /* Boot */
 
-  renderWallLayer();
+  loadLevel(0);
   resetDots();
   resetPositions();
   updateHud();
