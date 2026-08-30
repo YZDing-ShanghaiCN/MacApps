@@ -1,4 +1,4 @@
-const CACHE_NAME = "sgame-shell-v0.1.5";
+const CACHE_NAME = "sgame-shell-v0.1.6";
 const APP_SHELL = [
   "/",
   "/static/style.css?v=0.1.1",
@@ -12,8 +12,8 @@ const APP_SHELL = [
   "/static/minesweeper/minesweeper.css?v=0.1.2",
   "/static/minesweeper/minesweeper.js?v=0.1.2",
   "/pacman",
-  "/static/pacman/pacman.css?v=0.1.2",
-  "/static/pacman/pacman.js?v=0.1.2",
+  "/static/pacman/pacman.css?v=0.2.0",
+  "/static/pacman/pacman.js?v=0.2.0",
   "/2048",
   "/static/2048/2048.css?v=0.1.3",
   "/static/2048/2048.js?v=0.1.3",
