@@ -8,18 +8,135 @@
   };
   const MAX_TIME = 999;
   const LONG_PRESS_MS = 400;
+  const RECORDS_LIMIT = 10;
+  const STATS_KEY = "sgame-ms-stats";
+
+  /* DOM */
 
   const boardEl = document.getElementById("board");
   const mineCounterEl = document.getElementById("mine-counter");
   const timerEl = document.getElementById("timer");
-  const faceButton = document.getElementById("face-button");
+  const bestDisplayEl = document.getElementById("best-display");
   const flagModeButton = document.getElementById("flag-mode-button");
-  const messageEl = document.getElementById("message");
-  const difficultyButtons = {
-    beginner: document.getElementById("difficulty-beginner"),
-    intermediate: document.getElementById("difficulty-intermediate"),
-    expert: document.getElementById("difficulty-expert"),
-  };
+  const resultOverlay = document.getElementById("result-overlay");
+  const resultTitleEl = document.getElementById("result-title");
+  const resultDetailEl = document.getElementById("result-detail");
+  const rulesDialog = document.getElementById("rules-dialog");
+  const rankingListEl = document.getElementById("ranking-list");
+  const rankingEmptyEl = document.getElementById("ranking-empty");
+  const views = Array.from(document.querySelectorAll(".ms-view"));
+
+  /* Storage */
+
+  function recordsKey(difficultyKey) {
+    return `sgame-ms-records-${difficultyKey}`;
+  }
+
+  function loadRecords(difficultyKey) {
+    try {
+      const value = JSON.parse(localStorage.getItem(recordsKey(difficultyKey)));
+      if (Array.isArray(value)) {
+        return value.filter((rec) => typeof rec.time === "number");
+      }
+    } catch (err) {
+      /* corrupted entry: fall through */
+    }
+    return [];
+  }
+
+  function saveRecords(difficultyKey, records) {
+    localStorage.setItem(recordsKey(difficultyKey), JSON.stringify(records));
+  }
+
+  function bestOf(difficultyKey) {
+    const records = loadRecords(difficultyKey);
+    return records.length > 0 ? records[0].time : null;
+  }
+
+  function loadStats() {
+    const fallback = {
+      beginner: { games: 0, wins: 0 },
+      intermediate: { games: 0, wins: 0 },
+      expert: { games: 0, wins: 0 },
+    };
+    try {
+      const value = JSON.parse(localStorage.getItem(STATS_KEY));
+      if (value && typeof value === "object") {
+        for (const key of Object.keys(fallback)) {
+          const entry = value[key];
+          if (entry && typeof entry.games === "number" && typeof entry.wins === "number") {
+            fallback[key] = { games: entry.games, wins: entry.wins };
+          }
+        }
+      }
+    } catch (err) {
+      /* corrupted entry: use fallback */
+    }
+    return fallback;
+  }
+
+  function saveStats(stats) {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  }
+
+  /* Views */
+
+  function showView(id) {
+    for (const view of views) {
+      view.hidden = view.id !== id;
+    }
+  }
+
+  function updateMenuStats() {
+    const stats = loadStats();
+    let games = 0;
+    let wins = 0;
+    for (const key of Object.keys(DIFFICULTIES)) {
+      games += stats[key].games;
+      wins += stats[key].wins;
+    }
+    document.getElementById("stat-games").textContent = String(games);
+    document.getElementById("stat-wins").textContent = String(wins);
+    document.getElementById("stat-rate").textContent =
+      games > 0 ? `${Math.round((wins / games) * 100)}%` : "—";
+  }
+
+  function updateDifficultyBests() {
+    for (const key of Object.keys(DIFFICULTIES)) {
+      const best = bestOf(key);
+      const el = document.querySelector(`[data-best="${key}"]`);
+      el.textContent = best === null ? "最佳：暂无" : `最佳：${best} 秒`;
+    }
+  }
+
+  function renderRanking(difficultyKey) {
+    const records = loadRecords(difficultyKey);
+    rankingListEl.innerHTML = "";
+    rankingEmptyEl.hidden = records.length > 0;
+    const medals = ["🥇", "🥈", "🥉"];
+    records.slice(0, RECORDS_LIMIT).forEach((rec, i) => {
+      const item = document.createElement("li");
+      item.className = "ranking-item";
+      const rank = document.createElement("span");
+      rank.className = "ranking-rank";
+      rank.textContent = medals[i] || `${i + 1}.`;
+      const time = document.createElement("span");
+      time.className = "ranking-time";
+      time.textContent = `${rec.time} 秒`;
+      const date = document.createElement("span");
+      date.className = "ranking-date";
+      date.textContent = rec.date || "";
+      item.append(rank, time, date);
+      rankingListEl.appendChild(item);
+    });
+  }
+
+  function updateBestDisplay() {
+    const best = bestOf(difficultyKey);
+    bestDisplayEl.textContent = best === null ? "—" : `${best} 秒`;
+  }
+
+  /* Game state */
 
   let difficultyKey = "beginner";
   let rows = 0;
@@ -199,31 +316,54 @@
     }
   }
 
+  function showResult(title, detail) {
+    resultTitleEl.textContent = title;
+    resultDetailEl.textContent = detail;
+    resultOverlay.hidden = false;
+  }
+
   function lose(explodedIndex) {
     gameOver = true;
     stopTimer();
     revealAllMines(explodedIndex);
-    faceButton.textContent = "😵";
-    messageEl.textContent = "踩到地雷了！点击笑脸再来一局。";
-    messageEl.className = "message lose";
+    const stats = loadStats();
+    stats[difficultyKey].games += 1;
+    saveStats(stats);
+    const best = bestOf(difficultyKey);
+    showResult(
+      "💥 踩到地雷了",
+      `用时 ${seconds} 秒 · 最佳 ${best === null ? "暂无" : `${best} 秒`}`,
+    );
   }
 
   function checkWin() {
-    if (revealedCount === rows * cols - mineTotal) {
-      gameOver = true;
-      stopTimer();
-      for (let i = 0; i < cells.length; i += 1) {
-        if (cells[i].mine && !cells[i].flagged) {
-          cells[i].flagged = true;
-          flagCount += 1;
-          renderCell(i);
-        }
-      }
-      updateMineCounter();
-      faceButton.textContent = "😎";
-      messageEl.textContent = `胜利！用时 ${seconds} 秒。`;
-      messageEl.className = "message win";
+    if (revealedCount !== rows * cols - mineTotal) {
+      return;
     }
+    gameOver = true;
+    stopTimer();
+    for (let i = 0; i < cells.length; i += 1) {
+      if (cells[i].mine && !cells[i].flagged) {
+        cells[i].flagged = true;
+        flagCount += 1;
+        renderCell(i);
+      }
+    }
+    updateMineCounter();
+    const stats = loadStats();
+    stats[difficultyKey].games += 1;
+    stats[difficultyKey].wins += 1;
+    saveStats(stats);
+    const records = loadRecords(difficultyKey);
+    const isNewBest = records.length === 0 || seconds < records[0].time;
+    records.push({ time: seconds, date: new Date().toISOString().slice(0, 10) });
+    records.sort((a, b) => a.time - b.time);
+    saveRecords(difficultyKey, records.slice(0, RECORDS_LIMIT));
+    const best = isNewBest ? seconds : records[0].time;
+    showResult(
+      "🎉 胜利！",
+      `用时 ${seconds} 秒${isNewBest ? " · 新纪录！" : ""} · 最佳 ${best} 秒`,
+    );
   }
 
   function handleActivate(index) {
@@ -267,10 +407,9 @@
     flagCount = 0;
     seconds = 0;
     timerEl.textContent = "0";
-    faceButton.textContent = "🙂";
-    messageEl.textContent = "";
-    messageEl.className = "message";
+    resultOverlay.hidden = true;
     updateMineCounter();
+    updateBestDisplay();
 
     cells = Array.from({ length: rows * cols }, () => ({
       mine: false,
@@ -291,6 +430,21 @@
       cellButtons.push(button);
     }
   }
+
+  function startGame(key) {
+    difficultyKey = key;
+    buildBoard();
+    showView("game-view");
+  }
+
+  function backToMenu() {
+    stopTimer();
+    resultOverlay.hidden = true;
+    updateMenuStats();
+    showView("menu-view");
+  }
+
+  /* Input: board */
 
   boardEl.addEventListener("click", (event) => {
     const button = event.target.closest(".ms-cell");
@@ -338,7 +492,56 @@
   boardEl.addEventListener("touchend", cancelLongPress);
   boardEl.addEventListener("touchcancel", cancelLongPress);
 
-  faceButton.addEventListener("click", buildBoard);
+  /* Input: navigation */
+
+  document.getElementById("btn-start").addEventListener("click", () => {
+    updateDifficultyBests();
+    showView("difficulty-view");
+  });
+
+  document.getElementById("btn-ranking").addEventListener("click", () => {
+    const activeTab = document.querySelector(".ranking-tab.selected");
+    renderRanking(activeTab ? activeTab.dataset.tab : "beginner");
+    showView("ranking-view");
+  });
+
+  document.getElementById("btn-rules").addEventListener("click", () => {
+    rulesDialog.hidden = false;
+  });
+
+  document.getElementById("btn-close-rules").addEventListener("click", () => {
+    rulesDialog.hidden = true;
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !rulesDialog.hidden) {
+      rulesDialog.hidden = true;
+    }
+  });
+
+  document.getElementById("btn-back-from-difficulty").addEventListener("click", backToMenu);
+  document.getElementById("btn-back-from-ranking").addEventListener("click", backToMenu);
+  document.getElementById("btn-to-menu").addEventListener("click", backToMenu);
+  document.getElementById("btn-overlay-menu").addEventListener("click", backToMenu);
+  document.getElementById("btn-restart").addEventListener("click", buildBoard);
+  document.getElementById("btn-again").addEventListener("click", buildBoard);
+
+  for (const card of document.querySelectorAll(".diff-card")) {
+    card.addEventListener("click", () => {
+      startGame(card.dataset.diff);
+    });
+  }
+
+  for (const tab of document.querySelectorAll(".ranking-tab")) {
+    tab.addEventListener("click", () => {
+      for (const other of document.querySelectorAll(".ranking-tab")) {
+        const selected = other === tab;
+        other.classList.toggle("selected", selected);
+        other.setAttribute("aria-selected", String(selected));
+      }
+      renderRanking(tab.dataset.tab);
+    });
+  }
 
   flagModeButton.addEventListener("click", () => {
     flagMode = !flagMode;
@@ -346,19 +549,8 @@
     flagModeButton.setAttribute("aria-pressed", String(flagMode));
   });
 
-  for (const [key, button] of Object.entries(difficultyButtons)) {
-    button.addEventListener("click", () => {
-      if (difficultyKey === key) {
-        buildBoard();
-        return;
-      }
-      difficultyKey = key;
-      for (const [otherKey, otherButton] of Object.entries(difficultyButtons)) {
-        otherButton.classList.toggle("selected", otherKey === key);
-      }
-      buildBoard();
-    });
-  }
+  /* Boot */
 
+  updateMenuStats();
   buildBoard();
 })();

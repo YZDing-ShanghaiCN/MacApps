@@ -29,7 +29,7 @@ GAMES = (
     {
         "id": GAME_MINESWEEPER,
         "title": "扫雷",
-        "description": "避开地雷翻开所有安全格，支持初级、中级、高级三种难度。",
+        "description": "主菜单 + 三级难度 + 本地排行榜，避开地雷翻开所有安全格，挑战最快纪录。",
     },
     {
         "id": GAME_PACMAN,

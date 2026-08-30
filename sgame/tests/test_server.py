@@ -47,6 +47,7 @@ def test_minesweeper_page_served() -> None:
 
     assert response.status_code == 200
     assert "扫雷" in response.text
+    assert "排行榜" in response.text
     assert '<div id="board"' in response.text
 
 
