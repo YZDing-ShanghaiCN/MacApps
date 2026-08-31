@@ -37,6 +37,7 @@ htmlcov/
 # Logs and runtime files
 *.log
 *.pid
+docs/
 
 # IDE and editor files
 .idea/
