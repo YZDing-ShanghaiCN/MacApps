@@ -3,6 +3,9 @@
 
   const SIZE = 4;
   const BEST_KEY = "sgame-2048-best";
+  const STATS_KEY = "sgame-2048-stats";
+  const HISTORY_KEY = "sgame-2048-history";
+  const HISTORY_LIMIT = 20;
   const WIN_VALUE = 2048;
   const SWIPE_THRESHOLD = 24;
 
@@ -35,16 +38,28 @@
     loseDetail: (score) => `没有可移动的格子了。得分 ${score}。No moves left. Score ${score}.`,
   };
 
+  const views = {
+    menu: document.getElementById("menu-view"),
+    game: document.getElementById("game-view"),
+    records: document.getElementById("records-view"),
+  };
   const boardEl = document.getElementById("board");
   const tileLayerEl = document.getElementById("tile-layer");
   const scoreEl = document.getElementById("score");
   const bestEl = document.getElementById("best");
+  const maxTileEl = document.getElementById("max-tile");
   const overlayEl = document.getElementById("overlay");
   const overlayTitleEl = document.getElementById("overlay-title");
   const overlayDetailEl = document.getElementById("overlay-detail");
+  const overlayRecordEl = document.getElementById("overlay-record");
   const overlayContinueButton = document.getElementById("overlay-continue");
   const overlayRestartButton = document.getElementById("overlay-restart");
   const newGameButton = document.getElementById("new-game-button");
+  const pauseOverlayEl = document.getElementById("pause-overlay");
+  const pauseDetailEl = document.getElementById("pause-detail");
+  const rulesModal = document.getElementById("rules-modal");
+  const historyListEl = document.getElementById("history-list");
+  const historyEmptyEl = document.getElementById("history-empty");
 
   let tiles = [];
   let nextId = 1;
@@ -53,6 +68,11 @@
   let won = false;
   let over = false;
   let keepPlaying = false;
+  let moves = 0;
+  let maxTile = 0;
+  let paused = false;
+  let gameStartBest = 0;
+  let gameRecorded = false;
 
   const tileEls = new Map();
 
@@ -66,6 +86,44 @@
       best = score;
       localStorage.setItem(BEST_KEY, String(best));
     }
+  }
+
+  function loadStats() {
+    try {
+      const value = JSON.parse(localStorage.getItem(STATS_KEY));
+      return value && typeof value.games === "number"
+        ? { games: value.games, wins: value.wins || 0, maxTile: value.maxTile || 0 }
+        : { games: 0, wins: 0, maxTile: 0 };
+    } catch {
+      return { games: 0, wins: 0, maxTile: 0 };
+    }
+  }
+
+  function saveStats(stats) {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  }
+
+  function loadHistory() {
+    try {
+      const value = JSON.parse(localStorage.getItem(HISTORY_KEY));
+      return Array.isArray(value) ? value : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistory(entries) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+  }
+
+  function formatDate(ts) {
+    const date = new Date(ts);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function gameEnded() {
+    return over || (won && !keepPlaying);
   }
 
   function emptyCells() {
@@ -176,13 +234,16 @@
     if (!slide(dir)) {
       return;
     }
+    moves += 1;
     spawnTile();
     saveBest();
     if (!won && tiles.some((tile) => tile.value >= WIN_VALUE)) {
       won = true;
+      recordResult("win");
       showOverlay("win");
     } else if (!hasMoves()) {
       over = true;
+      recordResult("lose");
       showOverlay("lose");
     }
     render();
@@ -192,9 +253,13 @@
     scoreEl.textContent = score;
     bestEl.textContent = best;
 
+    let currentMax = 0;
     const seen = new Set();
     for (const tile of tiles) {
       seen.add(tile.id);
+      if (tile.value > currentMax) {
+        currentMax = tile.value;
+      }
       let el = tileEls.get(tile.id);
       if (!el) {
         el = document.createElement("div");
@@ -226,6 +291,9 @@
         tileEls.delete(id);
       }
     }
+
+    maxTile = currentMax;
+    maxTileEl.textContent = currentMax > 0 ? String(currentMax) : "--";
   }
 
   function showOverlay(type) {
@@ -233,11 +301,32 @@
     overlayDetailEl.textContent =
       type === "win" ? TEXT.winDetail(score) : TEXT.loseDetail(score);
     overlayContinueButton.hidden = type !== "win";
+    overlayRecordEl.hidden = !(score > gameStartBest);
     overlayEl.hidden = false;
   }
 
   function hideOverlay() {
     overlayEl.hidden = true;
+  }
+
+  function recordResult(result) {
+    if (gameRecorded) {
+      return;
+    }
+    gameRecorded = true;
+    const stats = loadStats();
+    stats.games += 1;
+    if (result === "win") {
+      stats.wins += 1;
+    }
+    if (maxTile > stats.maxTile) {
+      stats.maxTile = maxTile;
+    }
+    saveStats(stats);
+
+    const history = loadHistory();
+    history.unshift({ result, score, maxTile, moves, date: Date.now() });
+    saveHistory(history.slice(0, HISTORY_LIMIT));
   }
 
   function newGame() {
@@ -246,7 +335,13 @@
     won = false;
     over = false;
     keepPlaying = false;
+    moves = 0;
+    maxTile = 0;
+    paused = false;
+    gameStartBest = best;
+    gameRecorded = false;
     hideOverlay();
+    pauseOverlayEl.hidden = true;
     for (const el of tileEls.values()) {
       el.remove();
     }
@@ -256,9 +351,125 @@
     render();
   }
 
+  function gameInProgress() {
+    return score > 0 && !gameEnded();
+  }
+
+  function confirmNewGame() {
+    if (gameInProgress() && !window.confirm("确定开始新游戏吗？当前进度将丢失。")) {
+      return;
+    }
+    newGame();
+  }
+
+  function leaveGame() {
+    if (gameInProgress() && !window.confirm("返回菜单将丢失当前进度，确定吗？")) {
+      return;
+    }
+    pauseOverlayEl.hidden = true;
+    hideOverlay();
+    showView("menu");
+  }
+
+  function pauseGame() {
+    if (paused || gameEnded()) {
+      return;
+    }
+    paused = true;
+    pauseDetailEl.textContent = `得分 ${score} · 最大方块 ${maxTile > 0 ? maxTile : "--"}`;
+    pauseOverlayEl.hidden = false;
+  }
+
+  function resumeGame() {
+    if (!paused) {
+      return;
+    }
+    paused = false;
+    pauseOverlayEl.hidden = true;
+  }
+
+  function showView(id) {
+    for (const [key, element] of Object.entries(views)) {
+      element.hidden = key !== id;
+    }
+    if (id === "menu") {
+      renderMenuStats();
+    } else if (id === "records") {
+      renderRecords();
+    }
+  }
+
+  function renderMenuStats() {
+    const stats = loadStats();
+    document.getElementById("stat-games").textContent = String(stats.games);
+    document.getElementById("stat-best").textContent = String(loadBest());
+    document.getElementById("stat-max-tile").textContent =
+      stats.maxTile > 0 ? String(stats.maxTile) : "--";
+    document.getElementById("stat-wins").textContent = String(stats.wins);
+  }
+
+  function renderRecords() {
+    const stats = loadStats();
+    document.getElementById("rec-games").textContent = String(stats.games);
+    document.getElementById("rec-wins").textContent = String(stats.wins);
+    document.getElementById("rec-best").textContent = String(loadBest());
+    document.getElementById("rec-max-tile").textContent =
+      stats.maxTile > 0 ? String(stats.maxTile) : "--";
+
+    historyListEl.innerHTML = "";
+    const history = loadHistory();
+    for (const entry of history) {
+      const item = document.createElement("li");
+      item.className = "history-item";
+
+      const badge = document.createElement("span");
+      badge.className =
+        `history-result ${entry.result === "win" ? "result-win" : "result-lose"}`;
+      badge.textContent = entry.result === "win" ? "胜利" : "失败";
+
+      const entryScore = document.createElement("span");
+      entryScore.className = "history-score";
+      entryScore.textContent = `得分 ${entry.score}`;
+
+      const meta = document.createElement("span");
+      meta.className = "history-meta";
+      meta.textContent = `最大 ${entry.maxTile} · ${entry.moves} 步`;
+
+      const date = document.createElement("span");
+      date.className = "history-date";
+      date.textContent = formatDate(entry.date);
+
+      item.append(badge, entryScore, meta, date);
+      historyListEl.appendChild(item);
+    }
+    historyEmptyEl.hidden = history.length > 0;
+  }
+
+  function openRules() {
+    rulesModal.hidden = false;
+  }
+
+  function closeRules() {
+    rulesModal.hidden = true;
+  }
+
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (!rulesModal.hidden) {
+        closeRules();
+        return;
+      }
+      if (!views.game.hidden) {
+        if (paused) {
+          resumeGame();
+        } else {
+          pauseGame();
+        }
+      }
+      return;
+    }
     const dir = KEY_DIRS[event.key];
-    if (!dir) {
+    if (!dir || views.game.hidden || paused) {
       return;
     }
     event.preventDefault();
@@ -280,7 +491,7 @@
     "touchmove",
     (event) => {
       event.preventDefault();
-      if (touchStart === null) {
+      if (touchStart === null || views.game.hidden || paused) {
         return;
       }
       const touch = event.touches[0];
@@ -303,14 +514,48 @@
     touchStart = null;
   });
 
-  newGameButton.addEventListener("click", newGame);
+  document.getElementById("btn-start").addEventListener("click", () => {
+    newGame();
+    showView("game");
+  });
+  document.getElementById("btn-menu").addEventListener("click", leaveGame);
+  document.getElementById("btn-pause").addEventListener("click", () => {
+    if (paused) {
+      resumeGame();
+    } else {
+      pauseGame();
+    }
+  });
+  document.getElementById("btn-resume").addEventListener("click", resumeGame);
+  document.getElementById("btn-pause-new").addEventListener("click", confirmNewGame);
+  document.getElementById("btn-pause-menu").addEventListener("click", leaveGame);
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-close-rules").addEventListener("click", closeRules);
+  document.getElementById("btn-records").addEventListener("click", () => showView("records"));
+  document.getElementById("btn-back-menu").addEventListener("click", () => showView("menu"));
+  document.getElementById("btn-clear-history").addEventListener("click", () => {
+    if (window.confirm("确定清空最近记录吗？最高分与统计将保留。")) {
+      saveHistory([]);
+      renderRecords();
+    }
+  });
+
+  newGameButton.addEventListener("click", confirmNewGame);
   overlayRestartButton.addEventListener("click", newGame);
+  document.getElementById("overlay-menu").addEventListener("click", () => showView("menu"));
   overlayContinueButton.addEventListener("click", () => {
     keepPlaying = true;
     hideOverlay();
   });
 
+  rulesModal.addEventListener("click", (event) => {
+    if (event.target === rulesModal) {
+      closeRules();
+    }
+  });
+
   /* Boot */
   best = loadBest();
   newGame();
+  showView("menu");
 })();

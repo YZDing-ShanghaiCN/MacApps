@@ -9,7 +9,7 @@
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
-    <link rel="stylesheet" href="/static/2048/2048.css?v=0.1.3" />
+    <link rel="stylesheet" href="/static/2048/2048.css?v=0.2.0" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,46 +18,151 @@
         <h1>2048</h1>
       </header>
       <section class="game-panel">
-        <div class="status-bar">
-          <span class="status-item">得分 SCORE <strong id="score" class="value-accent">0</strong></span>
-          <span class="status-item">最高分 BEST <strong id="best" class="value-accent">0</strong></span>
-          <button id="new-game-button" type="button" class="primary">新游戏 NEW</button>
-        </div>
-        <div class="board-wrap">
-          <div id="board" class="board" aria-label="2048 棋盘">
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div class="cell"></div>
-            <div id="tile-layer" class="tile-layer"></div>
+
+        <!-- 主菜单 -->
+        <div id="menu-view" class="st-view">
+          <div class="menu-hero">
+            <span class="menu-icon" aria-hidden="true">🎮</span>
+            <h2>2048</h2>
+            <p>滑动合并相同数字 · 挑战合成 2048</p>
           </div>
-          <div id="overlay" class="overlay" hidden>
-            <h2 id="overlay-title"></h2>
-            <p id="overlay-detail"></p>
-            <div class="overlay-actions">
-              <button id="overlay-continue" type="button" hidden>继续游戏 KEEP GOING</button>
-              <button id="overlay-restart" type="button" class="primary">再来一局 RESTART</button>
+          <div class="menu-stats" aria-label="战绩统计">
+            <div class="stat">
+              <strong id="stat-games" class="value-accent">0</strong>
+              <span>总盘数</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best" class="value-accent">0</strong>
+              <span>最高分</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-max-tile">--</strong>
+              <span>最大方块</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-wins">0</strong>
+              <span>胜局</span>
             </div>
           </div>
+          <div class="menu-buttons">
+            <button id="btn-start" type="button" class="primary mode-btn">
+              开始游戏
+              <span class="mode-sub">滑动合并相同数字 · 目标 2048</span>
+            </button>
+          </div>
+          <div class="menu-links">
+            <button id="btn-rules" type="button" class="menu-btn small">📖 规则说明</button>
+            <button id="btn-records" type="button" class="menu-btn small">🏆 成绩记录</button>
+          </div>
         </div>
-        <p class="hint">
-          方向键 / WASD 移动，手机在棋盘上滑动。相同数字合并，目标合成 2048。<br />
-          Arrows / WASD to move; swipe on mobile. Merge equal tiles to reach 2048.
-        </p>
+
+        <!-- 游戏界面 -->
+        <div id="game-view" class="st-view" hidden>
+          <div class="game-toolbar">
+            <button id="btn-menu" type="button" class="menu-btn small">← 菜单</button>
+            <button id="btn-pause" type="button" class="menu-btn small">⏸ 暂停</button>
+          </div>
+          <div class="status-bar">
+            <span class="status-item">得分 SCORE <strong id="score" class="value-accent">0</strong></span>
+            <span class="status-item">最高分 BEST <strong id="best" class="value-accent">0</strong></span>
+            <span class="status-item">最大方块 MAX <strong id="max-tile">--</strong></span>
+            <button id="new-game-button" type="button" class="primary">新游戏 NEW</button>
+          </div>
+          <div class="board-wrap">
+            <div id="board" class="board" aria-label="2048 棋盘">
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div class="cell"></div>
+              <div id="tile-layer" class="tile-layer"></div>
+            </div>
+            <div id="pause-overlay" class="overlay" hidden>
+              <h2 class="overlay-title">已暂停</h2>
+              <p id="pause-detail" class="overlay-detail">得分 0 · 最大方块 --</p>
+              <div class="overlay-actions">
+                <button id="btn-resume" type="button" class="primary">继续</button>
+                <button id="btn-pause-new" type="button">新游戏</button>
+                <button id="btn-pause-menu" type="button">返回菜单</button>
+              </div>
+            </div>
+            <div id="overlay" class="overlay" hidden>
+              <h2 id="overlay-title"></h2>
+              <p id="overlay-detail"></p>
+              <p id="overlay-record" class="overlay-record" hidden>🎉 新纪录！</p>
+              <div class="overlay-actions">
+                <button id="overlay-continue" type="button" hidden>继续游戏 KEEP GOING</button>
+                <button id="overlay-restart" type="button" class="primary">再来一局 RESTART</button>
+                <button id="overlay-menu" type="button">返回菜单</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint">
+            方向键 / WASD 移动，手机在棋盘上滑动。相同数字合并，目标合成 2048。<br />
+            Arrows / WASD to move; swipe on mobile. Merge equal tiles to reach 2048.
+          </p>
+        </div>
+
+        <!-- 成绩记录 -->
+        <div id="records-view" class="st-view" hidden>
+          <h2 class="view-title">成绩记录</h2>
+          <div class="records-best" aria-label="战绩统计">
+            <div class="stat">
+              <strong id="rec-games">0</strong>
+              <span>总盘数</span>
+            </div>
+            <div class="stat">
+              <strong id="rec-wins">0</strong>
+              <span>胜局</span>
+            </div>
+            <div class="stat">
+              <strong id="rec-best" class="value-accent">0</strong>
+              <span>最高分</span>
+            </div>
+            <div class="stat">
+              <strong id="rec-max-tile">--</strong>
+              <span>最大方块</span>
+            </div>
+          </div>
+          <h3 class="records-heading">最近记录</h3>
+          <ul id="history-list" class="history-list"></ul>
+          <p id="history-empty" class="history-empty" hidden>暂无记录，去玩一局吧！</p>
+          <div class="records-actions">
+            <button id="btn-clear-history" type="button" class="menu-btn small">🗑 清空记录</button>
+            <button id="btn-back-menu" type="button" class="menu-btn small back-btn">← 返回菜单</button>
+          </div>
+        </div>
+
       </section>
     </main>
-    <script src="/static/2048/2048.js?v=0.1.3"></script>
+
+    <!-- 规则说明弹窗 -->
+    <div id="rules-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h3>规则说明</h3>
+        <ul class="rules-list">
+          <li>使用方向键、WASD 或触屏滑动移动所有方块。</li>
+          <li>两个相同数字的方块相撞时合并为一个，得分增加两数之和。</li>
+          <li>每次移动后会在空位随机生成一个 2（90%）或 4（10%）。</li>
+          <li>合成 2048 即获胜，可以选择继续挑战更高分数。</li>
+          <li>棋盘填满且无法合并时游戏结束。</li>
+          <li>小贴士：把大数保持在角落，尽量只向两三个方向移动。</li>
+        </ul>
+        <button id="btn-close-rules" type="button" class="primary">知道了</button>
+      </div>
+    </div>
+
+    <script src="/static/2048/2048.js?v=0.2.0"></script>
   </body>
 </html>
