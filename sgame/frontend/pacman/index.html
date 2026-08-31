@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>吃豆人 · sgame</title>
     <meta name="theme-color" content="#101322" />
-    <meta name="description" content="吃掉迷宫里所有的豆子，小心幽灵；能量豆可以让你反击。" />
+    <meta name="description" content="经典吃豆人：闯关模式逐关解锁，计时模式挑战最快通关，还有限时模式敬请期待。" />
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
-    <link rel="stylesheet" href="/static/pacman/pacman.css?v=0.1.2" />
+    <link rel="stylesheet" href="/static/pacman/pacman.css?v=0.2.0" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,26 +18,112 @@
         <h1>吃豆人</h1>
       </header>
       <section class="game-panel">
-        <div class="status-bar">
-          <span class="status-item">得分 <strong id="score" class="value-accent">0</strong></span>
-          <span class="status-item">最高分 <strong id="high-score">0</strong></span>
-          <span class="status-item">关卡 <strong id="level">1</strong></span>
-          <span class="status-item">生命 <span id="lives"></span></span>
-        </div>
-        <div class="canvas-wrap">
-          <canvas id="game"></canvas>
-          <div id="overlay" class="overlay" hidden>
-            <p id="overlay-title">GAME OVER</p>
-            <p id="overlay-detail"></p>
-            <button id="overlay-button" type="button" class="primary">再来一局</button>
+
+        <!-- 主菜单 -->
+        <div id="menu-view" class="pm-view">
+          <div class="menu-hero">
+            <span class="menu-icon" aria-hidden="true">🟡</span>
+            <h2>吃豆人</h2>
+            <p>经典街机迷宫 · 吃完豆子，躲开幽灵，能量豆让你反击</p>
+          </div>
+          <div class="menu-stats" aria-label="战绩统计">
+            <div class="stat">
+              <strong id="stat-progress" class="value-accent">0/4</strong>
+              <span>通关进度</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-highscore" class="value-accent">0</strong>
+              <span>最高分</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best-time" class="value-accent">—</strong>
+              <span>最佳计时</span>
+            </div>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-campaign" type="button" class="primary mode-btn">
+              🎯 闯关模式
+              <span class="mode-sub">逐关挑战 · 通关解锁下一关</span>
+            </button>
+            <button id="btn-timed" type="button" class="mode-btn">
+              ⏱️ 计时模式
+              <span class="mode-sub">一口气打通 4 关 · 挑战最快纪录</span>
+            </button>
+            <button id="btn-countdown" type="button" class="mode-btn" disabled>
+              ⏳ 限时模式
+              <span class="mode-sub">地图尚未设计 · 敬请期待</span>
+            </button>
+          </div>
+          <div class="menu-links">
+            <button id="btn-ranking" type="button" class="menu-btn small">🏆 计时排行榜</button>
+            <button id="btn-rules" type="button" class="menu-btn small">📖 规则说明</button>
           </div>
         </div>
-        <p class="hint">
-          方向键 / WASD 移动，手机上在画面内滑动；吃到能量豆后可以反击幽灵，
-          吃完所有豆子进入下一关。
-        </p>
+
+        <!-- 闯关选关 -->
+        <div id="levels-view" class="pm-view" hidden>
+          <h2 class="view-title">选择关卡</h2>
+          <p class="levels-subtitle">完成当前关卡后解锁下一关，进度保存在本机</p>
+          <div id="level-cards" class="level-cards"></div>
+          <button id="btn-back-to-menu" type="button" class="menu-btn back-btn">← 返回菜单</button>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game-view" class="pm-view" hidden>
+          <div class="game-toolbar">
+            <button id="btn-exit" type="button" class="menu-btn small">← 菜单</button>
+            <button id="btn-restart" type="button" class="menu-btn small">↻ 重新开始</button>
+            <button id="btn-pause" type="button" class="menu-btn small">⏸ 暂停</button>
+          </div>
+          <div class="status-bar">
+            <span class="status-item">得分 <strong id="score" class="value-accent">0</strong></span>
+            <span class="status-item">最高分 <strong id="high-score">0</strong></span>
+            <span class="status-item">关卡 <strong id="level">1</strong></span>
+            <span class="status-item" id="lives-item">生命 <span id="lives"></span></span>
+            <span class="status-item" id="time-item" hidden>用时 <strong id="timer" class="value-accent">0.0 秒</strong></span>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="game"></canvas>
+            <div id="overlay" class="overlay" hidden>
+              <p id="overlay-title">GAME OVER</p>
+              <p id="overlay-detail"></p>
+              <div class="overlay-actions">
+                <button id="overlay-primary" type="button" class="primary"></button>
+                <button id="overlay-secondary" type="button"></button>
+              </div>
+            </div>
+          </div>
+          <p id="game-hint" class="hint"></p>
+        </div>
+
+        <!-- 计时排行榜 -->
+        <div id="ranking-view" class="pm-view" hidden>
+          <h2 class="view-title">🏆 计时排行榜</h2>
+          <p class="ranking-subtitle">计时模式打通全部 4 关的最快前十名</p>
+          <ol id="ranking-list" class="ranking-list"></ol>
+          <p id="ranking-empty" class="ranking-empty" hidden>暂无记录，去计时模式挑战吧！</p>
+          <button id="btn-back-from-ranking" type="button" class="menu-btn back-btn">← 返回菜单</button>
+        </div>
+
+        <!-- 规则弹窗 -->
+        <div id="rules-dialog" class="modal" hidden>
+          <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+            <h3 id="rules-title">📖 规则说明</h3>
+            <ul class="rules-list">
+              <li>方向键 / WASD 移动，手机上在画面内滑动；吃掉迷宫里所有豆子即可过关。</li>
+              <li>普通豆 10 分，能量豆 50 分；吃到能量豆后幽灵变蓝，可以吃掉它们（200 分起连续翻倍）。</li>
+              <li>被幽灵碰到会损失一条命；闯关模式共 3 条命，耗尽后本局结束。</li>
+              <li>闯关模式共 4 关，地图越来越大、幽灵越来越多，通关后解锁下一关，进度保存在本机。</li>
+              <li>计时模式连续打通全部 4 关，用时越短越好；撞到幽灵不扣命，但每次 +3 秒惩罚。</li>
+              <li>限时模式：地图尚未设计，敬请期待。</li>
+              <li>游戏中按 Esc 或 P 暂停；切走页面会自动暂停。</li>
+            </ul>
+            <button id="btn-close-rules" type="button" class="primary">知道了</button>
+          </div>
+        </div>
+
       </section>
     </main>
-    <script src="/static/pacman/pacman.js?v=0.1.1"></script>
+    <script src="/static/pacman/pacman.js?v=0.2.0"></script>
   </body>
 </html>

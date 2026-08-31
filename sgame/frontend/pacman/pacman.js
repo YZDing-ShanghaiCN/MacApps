@@ -1,7 +1,43 @@
 (() => {
   "use strict";
 
-  const MAZE = [
+  /* ---- Levels and tuning ---- */
+
+  const L1_MAZE = [
+    "#############",
+    "#...........#",
+    "#o##.###.##o#",
+    "#...........#",
+    "#.##.....##.#",
+    "#.#..#-#..#.#",
+    "#....#G#....#",
+    "#....###....#",
+    "#...........#",
+    "#.##.....##.#",
+    "#...........#",
+    "#...........#",
+    "#############",
+  ];
+
+  const L2_MAZE = [
+    "###############",
+    "#.............#",
+    "#o##..###..##o#",
+    "#.............#",
+    "#.##..###..##.#",
+    "#.##.......##.#",
+    "#.##.##-##.##.#",
+    "#.##..#GG#....#",
+    "#....####.....#",
+    "#.##.......##.#",
+    "#.............#",
+    "#.##..###..##.#",
+    "#o##..###..##o#",
+    "#.............#",
+    "###############",
+  ];
+
+  const L3_MAZE = [
     "###################",
     "#........#........#",
     "#o##.###.#.###.##o#",
@@ -25,16 +61,37 @@
     "###################",
   ];
 
-  const ROWS = MAZE.length;
-  const COLS = MAZE[0].length;
+  const L4_MAZE = [
+    "#########################",
+    "#.......................#",
+    "#o##.###.##.#.##.###.##o#",
+    "#.......................#",
+    "#.##......#.#.#......##.#",
+    "#.....#.....#.....#.....#",
+    "#.#####.#####.#####.#####",
+    "#.....#.....#.....#.....#",
+    "#.......................#",
+    "#.......................#",
+    "#.########.#--##.######.#",
+    "#..........#GGG#........#",
+    "#..........#####........#",
+    "#.##.##.....#.....##.##.#",
+    "#.##.##.###.#.###.##.##.#",
+    "#.......................#",
+    "#.#####.#####.#####.#####",
+    "#.......................#",
+    "#.##.##.###.#.###.##.##.#",
+    "#.##.##.....#.....##.##.#",
+    "#o##.###.##.#.##.###.##o#",
+    "#.......................#",
+    "#########################",
+  ];
+
   const TILE = 24;
   const HIGH_SCORE_KEY = "sgame-pacman-highscore";
-
-  const HOUSE_ROW = 9;
-  const DOOR_ROW = 8;
-  const EXIT_ROW = 7;
-  const DOOR_COL = 9;
-  const PACMAN_START = { row: 15, col: 9 };
+  const PROGRESS_KEY = "sgame-pacman-progress";
+  const RECORDS_KEY = "sgame-pacman-timed-records";
+  const FRIGHT_DURATION = 6.5;
 
   const PACMAN_SPEED = 6.5;
   const GHOST_SPEED = 4.9;
@@ -43,7 +100,7 @@
   const READY_DURATION = 2.2;
   const DEATH_DURATION = 1.3;
   const CLEAR_DURATION = 2.0;
-  const RELEASE_TIMES = { pinky: 3.5, inky: 7, clyde: 11 };
+  const TIMED_DEATH_PENALTY = 3;
   const MODE_SCHEDULE = [
     [9, "scatter"],
     [20, "chase"],
@@ -62,25 +119,253 @@
   };
   const DIR_ORDER = [DIRS.up, DIRS.left, DIRS.down, DIRS.right];
 
-  const GHOST_DEFS = [
-    { name: "blinky", color: "#ff0000", corner: { row: 1, col: 17 }, start: { row: EXIT_ROW, col: DOOR_COL } },
-    { name: "pinky", color: "#ffb8ff", corner: { row: 1, col: 1 }, start: { row: HOUSE_ROW, col: 8 } },
-    { name: "inky", color: "#00ffff", corner: { row: 19, col: 1 }, start: { row: HOUSE_ROW, col: 9 } },
-    { name: "clyde", color: "#ffb852", corner: { row: 19, col: 17 }, start: { row: HOUSE_ROW, col: 10 } },
+  const ALL_GHOSTS = {
+    blinky: { name: "blinky", color: "#ff0000" },
+    pinky: { name: "pinky", color: "#ffb8ff" },
+    inky: { name: "inky", color: "#00ffff" },
+    clyde: { name: "clyde", color: "#ffb852" },
+  };
+
+  const LEVELS = [
+    {
+      maze: L1_MAZE,
+      house: { houseRow: 6, doorRow: 5, exitRow: 4, doorCol: 6 },
+      pacmanStart: { row: 9, col: 6 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 11 }, start: { row: 4, col: 6 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 6, col: 6 } },
+      ],
+      releaseTimes: { pinky: 3.5 },
+    },
+    {
+      maze: L2_MAZE,
+      house: { houseRow: 7, doorRow: 6, exitRow: 5, doorCol: 7 },
+      pacmanStart: { row: 9, col: 7 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 13 }, start: { row: 5, col: 7 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 7, col: 7 } },
+        { name: "inky", corner: { row: 13, col: 1 }, start: { row: 7, col: 8 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7 },
+    },
+    {
+      maze: L3_MAZE,
+      house: { houseRow: 9, doorRow: 8, exitRow: 7, doorCol: 9 },
+      pacmanStart: { row: 15, col: 9 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 17 }, start: { row: 7, col: 9 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 9, col: 8 } },
+        { name: "inky", corner: { row: 19, col: 1 }, start: { row: 9, col: 9 } },
+        { name: "clyde", corner: { row: 19, col: 17 }, start: { row: 9, col: 10 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7, clyde: 11 },
+    },
+    {
+      maze: L4_MAZE,
+      house: { houseRow: 11, doorRow: 10, exitRow: 9, doorCol: 12 },
+      pacmanStart: { row: 17, col: 12 },
+      ghosts: [
+        { name: "blinky", corner: { row: 1, col: 23 }, start: { row: 9, col: 12 } },
+        { name: "pinky", corner: { row: 1, col: 1 }, start: { row: 11, col: 12 } },
+        { name: "inky", corner: { row: 21, col: 1 }, start: { row: 11, col: 13 } },
+        { name: "clyde", corner: { row: 21, col: 23 }, start: { row: 11, col: 14 } },
+      ],
+      releaseTimes: { pinky: 3.5, inky: 7, clyde: 11 },
+    },
   ];
+
+  /* ---- DOM ---- */
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
-  canvas.width = COLS * TILE;
-  canvas.height = ROWS * TILE;
+
+  const views = Array.from(document.querySelectorAll(".pm-view"));
+  const gameView = document.getElementById("game-view");
+  const levelCardsEl = document.getElementById("level-cards");
+  const rankingListEl = document.getElementById("ranking-list");
+  const rankingEmptyEl = document.getElementById("ranking-empty");
+  const rulesDialog = document.getElementById("rules-dialog");
+  const gameHintEl = document.getElementById("game-hint");
 
   const scoreEl = document.getElementById("score");
   const highScoreEl = document.getElementById("high-score");
   const levelEl = document.getElementById("level");
   const livesEl = document.getElementById("lives");
+  const livesItem = document.getElementById("lives-item");
+  const timeItem = document.getElementById("time-item");
+  const timerEl = document.getElementById("timer");
+  const pauseButton = document.getElementById("btn-pause");
+
   const overlayEl = document.getElementById("overlay");
+  const overlayTitleEl = document.getElementById("overlay-title");
   const overlayDetailEl = document.getElementById("overlay-detail");
-  const overlayButton = document.getElementById("overlay-button");
+  const overlayPrimary = document.getElementById("overlay-primary");
+  const overlaySecondary = document.getElementById("overlay-secondary");
+
+  /* ---- Storage ---- */
+
+  function loadHighScore() {
+    const value = Number(localStorage.getItem(HIGH_SCORE_KEY));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  function loadProgress() {
+    const fallback = { cleared: [false, false, false, false], bestScores: [0, 0, 0, 0] };
+    try {
+      const value = JSON.parse(localStorage.getItem(PROGRESS_KEY));
+      if (value && typeof value === "object" && Array.isArray(value.cleared) && Array.isArray(value.bestScores)) {
+        for (let i = 0; i < LEVELS.length; i += 1) {
+          fallback.cleared[i] = value.cleared[i] === true;
+          if (typeof value.bestScores[i] === "number") {
+            fallback.bestScores[i] = value.bestScores[i];
+          }
+        }
+      }
+    } catch (err) {
+      /* corrupted entry: fall through */
+    }
+    return fallback;
+  }
+
+  function saveProgress() {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+  }
+
+  function loadRecords() {
+    try {
+      const value = JSON.parse(localStorage.getItem(RECORDS_KEY));
+      if (Array.isArray(value)) {
+        return value
+          .filter((rec) => rec && typeof rec.time === "number" && rec.time > 0)
+          .sort((a, b) => a.time - b.time)
+          .slice(0, 10);
+      }
+    } catch (err) {
+      /* corrupted entry: fall through */
+    }
+    return [];
+  }
+
+  function saveRecords(records) {
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  }
+
+  function addTimedRecord(time) {
+    const entry = {
+      time,
+      date: new Date().toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    const records = loadRecords();
+    records.push(entry);
+    records.sort((a, b) => a.time - b.time);
+    const rank = records.indexOf(entry);
+    saveRecords(records.slice(0, 10));
+    return rank < 10 ? rank : null;
+  }
+
+  function formatTime(total) {
+    const minutes = Math.floor(total / 60);
+    const seconds = total - minutes * 60;
+    const secText = seconds.toFixed(1).padStart(4, "0");
+    return minutes > 0 ? `${minutes}:${secText}` : `${secText} 秒`;
+  }
+
+  /* ---- Views ---- */
+
+  function showView(id) {
+    for (const view of views) {
+      view.hidden = view.id !== id;
+    }
+    if (id === "menu-view") {
+      updateMenuStats();
+    } else if (id === "levels-view") {
+      renderLevelCards();
+    } else if (id === "ranking-view") {
+      renderRanking();
+    }
+  }
+
+  function updateMenuStats() {
+    const clearedCount = progress.cleared.filter(Boolean).length;
+    document.getElementById("stat-progress").textContent = `${clearedCount}/${LEVELS.length}`;
+    document.getElementById("stat-highscore").textContent = String(highScore);
+    const records = loadRecords();
+    document.getElementById("stat-best-time").textContent =
+      records.length > 0 ? formatTime(records[0].time) : "—";
+  }
+
+  function isUnlocked(levelNumber) {
+    return levelNumber === 1 || progress.cleared[levelNumber - 2] === true;
+  }
+
+  function renderLevelCards() {
+    levelCardsEl.innerHTML = "";
+    LEVELS.forEach((cfg, i) => {
+      const n = i + 1;
+      const locked = !isUnlocked(n);
+      const cleared = progress.cleared[i];
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "level-card";
+      if (locked) {
+        card.classList.add("locked");
+      }
+      if (cleared) {
+        card.classList.add("cleared");
+      }
+      card.disabled = locked;
+      const icon = document.createElement("span");
+      icon.className = "level-icon";
+      icon.textContent = locked ? "🔒" : cleared ? "★" : String(n);
+      const name = document.createElement("span");
+      name.className = "level-name";
+      name.textContent = `第 ${n} 关`;
+      const spec = document.createElement("span");
+      spec.className = "level-spec";
+      spec.textContent = `${cfg.maze[0].length}×${cfg.maze.length} · ${cfg.ghosts.length} 只幽灵`;
+      const status = document.createElement("span");
+      status.className = "level-status";
+      if (locked) {
+        status.textContent = `未解锁 · 先通关第 ${n - 1} 关`;
+      } else if (cleared) {
+        status.textContent = `已通关 · 最佳 ${progress.bestScores[i]} 分`;
+      } else {
+        status.textContent = n === 1 ? "开始挑战" : "未挑战";
+      }
+      card.append(icon, name, spec, status);
+      card.addEventListener("click", () => startCampaign(n));
+      levelCardsEl.appendChild(card);
+    });
+  }
+
+  function renderRanking() {
+    const records = loadRecords();
+    rankingListEl.innerHTML = "";
+    rankingEmptyEl.hidden = records.length > 0;
+    const medals = ["🥇", "🥈", "🥉"];
+    records.forEach((rec, i) => {
+      const item = document.createElement("li");
+      item.className = "ranking-item";
+      const rank = document.createElement("span");
+      rank.className = "ranking-rank";
+      rank.textContent = medals[i] || `${i + 1}.`;
+      const time = document.createElement("span");
+      time.className = "ranking-time";
+      time.textContent = formatTime(rec.time);
+      const date = document.createElement("span");
+      date.className = "ranking-date";
+      date.textContent = rec.date || "";
+      item.append(rank, time, date);
+      rankingListEl.appendChild(item);
+    });
+  }
+
+  /* ---- Game state ---- */
 
   let dots = [];
   let dotsRemaining = 0;
@@ -88,7 +373,11 @@
   let highScore = loadHighScore();
   let lives = 3;
   let level = 1;
-  let state = "attract";
+  let activeLevel = 0;
+  let ROWS = 0;
+  let COLS = 0;
+  let eyesField = null;
+  let state = "idle";
   let readyTimer = 0;
   let deathTimer = 0;
   let clearTimer = 0;
@@ -102,10 +391,16 @@
   let lastDirAngle = Math.PI;
   const releaseOverrides = new WeakMap();
 
-  function loadHighScore() {
-    const value = Number(localStorage.getItem(HIGH_SCORE_KEY));
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  }
+  let mode = null;
+  let progress = loadProgress();
+  let paused = false;
+  let overlayKind = null;
+  let levelStartScore = 0;
+  let runTime = 0;
+  let penalty = 0;
+  let deathPenaltyNote = false;
+
+  /* ---- Maze helpers ---- */
 
   function wrapCol(col) {
     return ((col % COLS) + COLS) % COLS;
@@ -115,7 +410,7 @@
     if (row < 0 || row >= ROWS) {
       return "#";
     }
-    return MAZE[row][wrapCol(col)];
+    return LEVELS[activeLevel].maze[row][wrapCol(col)];
   }
 
   function isWall(col, row, allowDoor) {
@@ -130,14 +425,14 @@
   }
 
   function levelSpeedMul() {
-    return 1 + Math.min(level - 1, 8) * 0.04;
+    return 1;
   }
 
   function currentMode() {
     let remaining = levelClock;
-    for (const [duration, mode] of MODE_SCHEDULE) {
+    for (const [duration, modeName] of MODE_SCHEDULE) {
       if (remaining < duration) {
-        return mode;
+        return modeName;
       }
       remaining -= duration;
     }
@@ -205,7 +500,18 @@
     return dist;
   }
 
-  const eyesField = computeDistanceField(HOUSE_ROW, DOOR_COL);
+  function loadLevel(idx) {
+    activeLevel = idx;
+    const cfg = LEVELS[idx];
+    ROWS = cfg.maze.length;
+    COLS = cfg.maze[0].length;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+    wallCanvas.width = canvas.width;
+    wallCanvas.height = canvas.height;
+    renderWallLayer();
+    eyesField = computeDistanceField(cfg.house.houseRow, cfg.house.doorCol);
+  }
 
   function resetDots() {
     dots = [];
@@ -213,7 +519,7 @@
     for (let row = 0; row < ROWS; row += 1) {
       const line = [];
       for (let col = 0; col < COLS; col += 1) {
-        const ch = MAZE[row][col];
+        const ch = LEVELS[activeLevel].maze[row][col];
         if (ch === ".") {
           line.push(1);
           dotsRemaining += 1;
@@ -229,12 +535,15 @@
   }
 
   function resetPositions() {
-    pacman = makeEntity(PACMAN_START.row, PACMAN_START.col);
+    const cfg = LEVELS[activeLevel];
+    pacman = makeEntity(cfg.pacmanStart.row, cfg.pacmanStart.col);
     pacman.dir = DIRS.left;
     lastDirAngle = Math.PI;
     pendingDir = DIRS.none;
-    ghosts = GHOST_DEFS.map((def) => ({
-      ...def,
+    ghosts = cfg.ghosts.map((def) => ({
+      ...ALL_GHOSTS[def.name],
+      corner: def.corner,
+      start: def.start,
       row: def.start.row,
       col: def.start.col,
       targetRow: def.start.row,
@@ -253,22 +562,167 @@
     lifeClock = 0;
   }
 
+  /* ---- Game flow ---- */
+
+  function hideOverlay() {
+    overlayKind = null;
+    overlayEl.hidden = true;
+  }
+
+  function showOverlay(kind, title, detail, primaryLabel, secondaryLabel) {
+    overlayKind = kind;
+    overlayTitleEl.textContent = title;
+    overlayDetailEl.textContent = detail;
+    overlayPrimary.textContent = primaryLabel;
+    overlayPrimary.hidden = false;
+    overlaySecondary.textContent = secondaryLabel || "";
+    overlaySecondary.hidden = !secondaryLabel;
+    overlayEl.hidden = false;
+  }
+
+  function updateGameHint() {
+    gameHintEl.textContent =
+      mode === "timed"
+        ? "计时模式：连续打通 4 关，用时计入排行榜。撞到幽灵不扣命，每次 +3 秒惩罚；方向键 / WASD 移动，Esc 暂停。"
+        : "闯关模式：吃完所有豆子过关，通关解锁下一关。3 条命，能量豆可以反击幽灵；方向键 / WASD 移动，Esc 暂停。";
+  }
+
   function startLevel() {
+    levelStartScore = score;
     resetDots();
     resetPositions();
     eatAt(pacman.row, pacman.col);
     levelClock = 0;
     state = "ready";
     readyTimer = READY_DURATION;
+    deathPenaltyNote = false;
     updateHud();
   }
 
-  function newGame() {
+  function startCampaign(levelNumber) {
+    mode = "campaign";
+    score = 0;
+    lives = 3;
+    level = levelNumber;
+    clearPause();
+    hideOverlay();
+    loadLevel(levelNumber - 1);
+    showView("game-view");
+    updateGameHint();
+    startLevel();
+  }
+
+  function startTimed() {
+    mode = "timed";
     score = 0;
     lives = 3;
     level = 1;
-    overlayEl.hidden = true;
+    runTime = 0;
+    penalty = 0;
+    clearPause();
+    hideOverlay();
+    loadLevel(0);
+    showView("game-view");
+    updateGameHint();
     startLevel();
+  }
+
+  function restartLevel() {
+    if (mode !== "campaign") {
+      startTimed();
+      return;
+    }
+    score = levelStartScore;
+    lives = 3;
+    clearPause();
+    hideOverlay();
+    loadLevel(level - 1);
+    startLevel();
+  }
+
+  function exitToMenu() {
+    mode = null;
+    state = "idle";
+    clearPause();
+    hideOverlay();
+    showView("menu-view");
+  }
+
+  function goToLevels() {
+    mode = "campaign";
+    state = "idle";
+    clearPause();
+    hideOverlay();
+    showView("levels-view");
+  }
+
+  function primaryAction() {
+    switch (overlayKind) {
+      case "paused":
+        setPaused(false);
+        break;
+      case "gameover":
+        restartLevel();
+        break;
+      case "levelclear":
+        afterLevelClear();
+        break;
+      case "victory":
+        if (mode === "campaign") {
+          startCampaign(1);
+        } else {
+          startTimed();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  function secondaryAction() {
+    switch (overlayKind) {
+      case "paused":
+        exitToMenu();
+        break;
+      case "gameover":
+      case "levelclear":
+        goToLevels();
+        break;
+      case "victory":
+        if (mode === "campaign") {
+          goToLevels();
+        } else {
+          exitToMenu();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  function setPaused(value) {
+    if (value === paused) {
+      return;
+    }
+    if (value && state !== "ready" && state !== "playing") {
+      return;
+    }
+    paused = value;
+    pauseButton.textContent = paused ? "▶ 继续" : "⏸ 暂停";
+    if (paused) {
+      showOverlay("paused", "已暂停", "按 Esc / P 或点击继续", "▶ 继续", "🏠 返回菜单");
+    } else {
+      hideOverlay();
+    }
+  }
+
+  function clearPause() {
+    paused = false;
+    pauseButton.textContent = "⏸ 暂停";
+  }
+
+  function togglePause() {
+    setPaused(!paused);
   }
 
   function addScore(points) {
@@ -284,6 +738,12 @@
     scoreEl.textContent = String(score);
     highScoreEl.textContent = String(highScore);
     levelEl.textContent = String(level);
+    const isTimed = mode === "timed";
+    livesItem.hidden = isTimed;
+    timeItem.hidden = !isTimed;
+    if (isTimed) {
+      timerEl.textContent = formatTime(runTime + penalty);
+    }
     livesEl.innerHTML = "";
     for (let i = 0; i < lives; i += 1) {
       const icon = document.createElement("span");
@@ -303,12 +763,26 @@
       addScore(10);
     } else {
       addScore(50);
-      frightTimer = Math.max(6.5 - (level - 1) * 0.5, 2.5);
+      frightTimer = FRIGHT_DURATION;
       ghostCombo = 0;
     }
     if (dotsRemaining === 0) {
       state = "levelclear";
       clearTimer = CLEAR_DURATION;
+      if (mode === "campaign") {
+        const idx = level - 1;
+        progress.cleared[idx] = true;
+        progress.bestScores[idx] = Math.max(progress.bestScores[idx], score);
+        saveProgress();
+        const last = level >= LEVELS.length;
+        showOverlay(
+          "levelclear",
+          "本关完成!",
+          `得分 ${score} · 最高分 ${highScore}`,
+          last ? "🏆 通关!" : "▶ 下一关",
+          "🗺️ 返回选关",
+        );
+      }
     }
   }
 
@@ -389,9 +863,10 @@
   }
 
   function updateLeaving(ghost, dt) {
+    const cfg = LEVELS[activeLevel];
     const speed = GHOST_SPEED * levelSpeedMul();
     if (ghost.leavePhase === 0) {
-      const targetX = DOOR_COL + 0.5;
+      const targetX = cfg.house.doorCol + 0.5;
       const step = speed * dt;
       if (Math.abs(ghost.fx - targetX) <= step) {
         ghost.fx = targetX;
@@ -401,15 +876,15 @@
       }
       return;
     }
-    const targetY = EXIT_ROW + 0.5;
+    const targetY = cfg.house.exitRow + 0.5;
     const step = speed * dt;
     if (ghost.fy - targetY <= step) {
       ghost.fy = targetY;
       ghost.state = "active";
-      ghost.row = EXIT_ROW;
-      ghost.col = DOOR_COL;
-      ghost.targetRow = EXIT_ROW;
-      ghost.targetCol = DOOR_COL;
+      ghost.row = cfg.house.exitRow;
+      ghost.col = cfg.house.doorCol;
+      ghost.targetRow = cfg.house.exitRow;
+      ghost.targetCol = cfg.house.doorCol;
       ghost.progress = 1;
       ghost.dir = DIRS.none;
     } else {
@@ -428,14 +903,19 @@
   }
 
   function updateGhost(ghost, dt) {
+    const cfg = LEVELS[activeLevel];
     if (ghost.state === "house") {
       ghost.housePhase += dt * 3;
-      const releaseAt = releaseOverrides.get(ghost) ?? RELEASE_TIMES[ghost.name] ?? 0;
+      const override = releaseOverrides.get(ghost);
+      let releaseAt = override !== undefined ? override : cfg.releaseTimes[ghost.name];
+      if (releaseAt === undefined) {
+        releaseAt = 0;
+      }
       if (lifeClock >= releaseAt) {
         ghost.state = "leaving";
         ghost.leavePhase = 0;
         ghost.fx = ghost.col + 0.5;
-        ghost.fy = HOUSE_ROW + 0.5;
+        ghost.fy = cfg.house.houseRow + 0.5;
       }
       return;
     }
@@ -448,14 +928,14 @@
     if (!arrived) {
       return;
     }
-    if (ghost.state === "eyes" && ghost.row === HOUSE_ROW && ghost.col === DOOR_COL) {
+    if (ghost.state === "eyes" && ghost.row === cfg.house.houseRow && ghost.col === cfg.house.doorCol) {
       ghost.state = "house";
-      ghost.row = HOUSE_ROW;
-      ghost.col = DOOR_COL;
-      ghost.targetRow = HOUSE_ROW;
-      ghost.targetCol = DOOR_COL;
-      ghost.fx = DOOR_COL + 0.5;
-      ghost.fy = HOUSE_ROW + 0.5;
+      ghost.row = cfg.house.houseRow;
+      ghost.col = cfg.house.doorCol;
+      ghost.targetRow = cfg.house.houseRow;
+      ghost.targetCol = cfg.house.doorCol;
+      ghost.fx = cfg.house.doorCol + 0.5;
+      ghost.fy = cfg.house.houseRow + 0.5;
       ghost.progress = 1;
       releaseOverrides.set(ghost, lifeClock + 1.5);
       return;
@@ -528,31 +1008,72 @@
   }
 
   function afterDeath() {
-    lives -= 1;
-    if (lives <= 0) {
-      state = "gameover";
-      overlayDetailEl.textContent = `得分 ${score} · 最高分 ${highScore} · 关卡 ${level}`;
-      overlayEl.hidden = false;
+    if (mode === "timed") {
+      penalty += TIMED_DEATH_PENALTY;
+      deathPenaltyNote = true;
+      resetPositions();
+      eatAt(pacman.row, pacman.col);
+      state = "ready";
+      readyTimer = READY_DURATION;
       updateHud();
+      return;
+    }
+    lives -= 1;
+    updateHud();
+    if (lives <= 0) {
+      state = "idle";
+      showOverlay(
+        "gameover",
+        "游戏结束",
+        `得分 ${score} · 最高分 ${highScore} · 止步第 ${level} 关`,
+        "↻ 重新挑战本关",
+        "🗺️ 返回选关",
+      );
       return;
     }
     resetPositions();
     eatAt(pacman.row, pacman.col);
     state = "ready";
     readyTimer = READY_DURATION;
-    updateHud();
   }
 
   function afterLevelClear() {
+    if (level >= LEVELS.length) {
+      state = "idle";
+      if (mode === "timed") {
+        const finalTime = runTime + penalty;
+        const rank = addTimedRecord(finalTime);
+        if (rank === 0) {
+          showOverlay("victory", "新纪录!", `用时 ${formatTime(finalTime)} · 恭喜登顶排行榜`, "⏱️ 再来一次", "🏠 返回菜单");
+        } else if (rank === null) {
+          showOverlay("victory", "通关成功!", `用时 ${formatTime(finalTime)} · 未进前十，再接再厉`, "⏱️ 再来一次", "🏠 返回菜单");
+        } else {
+          showOverlay("victory", "通关成功!", `用时 ${formatTime(finalTime)} · 排行榜第 ${rank + 1} 名`, "⏱️ 再来一次", "🏠 返回菜单");
+        }
+      } else {
+        showOverlay("victory", "恭喜通关!", `得分 ${score} · 最高分 ${highScore} · 4 关全部完成`, "🎮 再来一局", "🗺️ 返回选关");
+      }
+      return;
+    }
     level += 1;
+    hideOverlay();
+    loadLevel(level - 1);
     startLevel();
   }
 
   function update(dt) {
+    if (paused) {
+      return;
+    }
+    if (mode === "timed" && state !== "idle") {
+      runTime += dt;
+      timerEl.textContent = formatTime(runTime + penalty);
+    }
     if (state === "ready") {
       readyTimer -= dt;
       if (readyTimer <= 0) {
         state = "playing";
+        deathPenaltyNote = false;
       }
       return;
     }
@@ -564,9 +1085,11 @@
       return;
     }
     if (state === "levelclear") {
-      clearTimer -= dt;
-      if (clearTimer <= 0) {
-        afterLevelClear();
+      if (mode === "timed") {
+        clearTimer -= dt;
+        if (clearTimer <= 0) {
+          afterLevelClear();
+        }
       }
       return;
     }
@@ -588,20 +1111,21 @@
     checkCollisions();
   }
 
-  /* Rendering */
+  /* ---- Rendering ---- */
 
   const wallCanvas = document.createElement("canvas");
   wallCanvas.width = canvas.width;
   wallCanvas.height = canvas.height;
 
   function renderWallLayer() {
+    const maze = LEVELS[activeLevel].maze;
     const wctx = wallCanvas.getContext("2d");
     wctx.fillStyle = "#05060f";
     wctx.fillRect(0, 0, wallCanvas.width, wallCanvas.height);
     const inset = 5;
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
-        if (MAZE[row][col] !== "#") {
+        if (maze[row][col] !== "#") {
           continue;
         }
         const x = col * TILE;
@@ -634,7 +1158,7 @@
     }
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
-        if (MAZE[row][col] !== "-") {
+        if (maze[row][col] !== "-") {
           continue;
         }
         const x = col * TILE;
@@ -790,12 +1314,6 @@
       drawDots(t);
     }
 
-    if (state === "attract") {
-      drawCenterText("PAC-MAN", canvas.height / 2 - 30, "#ffcc00", 34);
-      drawCenterText("按方向键开始", canvas.height / 2 + 12, "#eceaf4", 18);
-      return;
-    }
-
     if (state !== "dying") {
       for (const ghost of ghosts) {
         const pos = ghostPixelPos(ghost);
@@ -808,11 +1326,18 @@
     drawWithWrap((x) => drawPacman(t, x, py), ppos.x * TILE);
 
     if (state === "ready") {
-      drawCenterText("READY!", 13 * TILE + TILE / 2, "#ffcc00", 18);
+      drawCenterText(
+        deathPenaltyNote ? `时间惩罚 +${TIMED_DEATH_PENALTY} 秒` : "READY!",
+        canvas.height * 0.62,
+        "#ffcc00",
+        18,
+      );
+    } else if (state === "levelclear" && mode === "timed") {
+      drawCenterText(`第 ${level} 关完成!`, canvas.height / 2, "#ffcc00", 22);
     }
   }
 
-  /* Input */
+  /* ---- Input ---- */
 
   const KEY_DIRS = {
     ArrowUp: DIRS.up,
@@ -826,10 +1351,25 @@
   };
 
   document.addEventListener("keydown", (event) => {
-    if (event.code === "Space" || event.code === "Enter") {
-      if (state === "gameover" || state === "attract") {
-        newGame();
+    if (!rulesDialog.hidden) {
+      if (event.code === "Escape" || event.code === "Enter" || event.code === "Space") {
         event.preventDefault();
+        rulesDialog.hidden = true;
+      }
+      return;
+    }
+    if (gameView.hidden) {
+      return;
+    }
+    if (event.code === "Escape" || event.code === "KeyP") {
+      event.preventDefault();
+      togglePause();
+      return;
+    }
+    if (event.code === "Space" || event.code === "Enter") {
+      if (paused || overlayKind !== null) {
+        event.preventDefault();
+        primaryAction();
       }
       return;
     }
@@ -838,14 +1378,6 @@
       return;
     }
     event.preventDefault();
-    if (state === "attract") {
-      newGame();
-      pendingDir = dir;
-      return;
-    }
-    if (state === "gameover") {
-      return;
-    }
     pendingDir = dir;
   });
 
@@ -854,9 +1386,6 @@
     event.preventDefault();
     const touch = event.touches[0];
     touchStart = { x: touch.clientX, y: touch.clientY };
-    if (state === "attract" || state === "gameover") {
-      newGame();
-    }
   }, { passive: false });
 
   canvas.addEventListener("touchmove", (event) => {
@@ -882,24 +1411,49 @@
     touchStart = null;
   });
 
-  overlayButton.addEventListener("click", () => {
-    newGame();
+  /* ---- Buttons ---- */
+
+  document.getElementById("btn-campaign").addEventListener("click", () => showView("levels-view"));
+  document.getElementById("btn-timed").addEventListener("click", startTimed);
+  document.getElementById("btn-ranking").addEventListener("click", () => showView("ranking-view"));
+  document.getElementById("btn-rules").addEventListener("click", () => {
+    rulesDialog.hidden = false;
+  });
+  document.getElementById("btn-close-rules").addEventListener("click", () => {
+    rulesDialog.hidden = true;
+  });
+  document.getElementById("btn-back-to-menu").addEventListener("click", () => showView("menu-view"));
+  document.getElementById("btn-back-from-ranking").addEventListener("click", () => showView("menu-view"));
+  document.getElementById("btn-exit").addEventListener("click", exitToMenu);
+  document.getElementById("btn-restart").addEventListener("click", restartLevel);
+  pauseButton.addEventListener("click", togglePause);
+  overlayPrimary.addEventListener("click", primaryAction);
+  overlaySecondary.addEventListener("click", secondaryAction);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      setPaused(true);
+    }
   });
 
-  /* Boot */
+  /* ---- Boot ---- */
 
-  renderWallLayer();
+  loadLevel(0);
   resetDots();
   resetPositions();
   updateHud();
+  updateGameHint();
+  showView("menu-view");
 
   let lastTime = null;
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min(lastTime === null ? 0 : (now - lastTime) / 1000, 0.05);
     lastTime = now;
-    update(dt);
-    draw(now / 1000);
+    if (!gameView.hidden) {
+      update(dt);
+      draw(now / 1000);
+    }
   }
   requestAnimationFrame(frame);
 })();

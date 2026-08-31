@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>俄罗斯方块 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="经典俄罗斯方块：主菜单、三级起点、本地排行榜；支持暂存、预览、硬降，键盘与触屏均可操作。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
+    <link rel="stylesheet" href="/static/tetris/tetris.css?v=0.2.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>俄罗斯方块</h1>
+      </header>
+      <section class="game-panel">
+        <!-- 主菜单 -->
+        <div id="menu-view" class="tt-view">
+          <div class="menu-hero">
+            <div class="menu-logo" aria-hidden="true">
+              <span class="logo-block b1"></span>
+              <span class="logo-block b2"></span>
+              <span class="logo-block b3"></span>
+              <span class="logo-block b4"></span>
+            </div>
+            <h2>俄罗斯方块</h2>
+            <p>经典落下式拼块游戏 · 消除整行 · 挑战高分</p>
+          </div>
+          <div class="menu-stats" aria-label="战绩统计">
+            <div class="stat">
+              <strong id="stat-games" class="value-accent">0</strong>
+              <span>总局数</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best" class="value-accent">0</strong>
+              <span>最高分</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-lines" class="value-accent">0</strong>
+              <span>累计消行</span>
+            </div>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-start" type="button" class="primary menu-btn">🎮 开始游戏</button>
+            <button id="btn-ranking" type="button" class="menu-btn">🏆 排行榜</button>
+            <button id="btn-rules" type="button" class="menu-btn">📖 规则说明</button>
+            <button id="btn-sound-menu" type="button" class="menu-btn" aria-pressed="true">🔊 音效：开</button>
+          </div>
+        </div>
+
+        <!-- 起点关卡选择 -->
+        <div id="mode-view" class="tt-view" hidden>
+          <h2 class="view-title">选择起点关卡</h2>
+          <p class="view-subtitle">起点越高，方块下落越快，单次得分加成也越高</p>
+          <div class="mode-cards">
+            <button type="button" class="mode-card" data-mode="casual">
+              <span class="mode-icon" aria-hidden="true">🌱</span>
+              <span class="mode-name">休闲</span>
+              <span class="mode-desc">从第 1 关开始 · 轻松上手</span>
+              <span class="mode-best" data-best="casual">最佳：暂无</span>
+            </button>
+            <button type="button" class="mode-card" data-mode="classic">
+              <span class="mode-icon" aria-hidden="true">⚡</span>
+              <span class="mode-name">经典</span>
+              <span class="mode-desc">从第 5 关开始 · 标准速度</span>
+              <span class="mode-best" data-best="classic">最佳：暂无</span>
+            </button>
+            <button type="button" class="mode-card" data-mode="expert">
+              <span class="mode-icon" aria-hidden="true">🔥</span>
+              <span class="mode-name">高手</span>
+              <span class="mode-desc">从第 10 关开始 · 极速挑战</span>
+              <span class="mode-best" data-best="expert">最佳：暂无</span>
+            </button>
+          </div>
+          <button id="btn-back-mode" type="button" class="menu-btn back-btn">← 返回菜单</button>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game-view" class="tt-view" hidden>
+          <div class="game-toolbar">
+            <button id="btn-to-menu" type="button" class="menu-btn small">← 菜单</button>
+            <span id="mode-label" class="mode-label"></span>
+            <button id="btn-pause" type="button" class="menu-btn small">⏸ 暂停</button>
+            <button id="btn-restart" type="button" class="menu-btn small" title="重新开始">↻ 重开</button>
+            <button id="btn-sound-game" type="button" class="menu-btn small" aria-pressed="true">🔊</button>
+          </div>
+          <div class="tetris-layout">
+            <aside class="hold-box" aria-label="暂存方块">
+              <p class="mini-label">暂存 <kbd>C</kbd></p>
+              <canvas id="hold-panel" width="120" height="120"></canvas>
+            </aside>
+            <div class="board-area">
+              <div class="canvas-wrap" id="canvas-wrap">
+                <canvas id="game"></canvas>
+                <div id="overlay" class="overlay" hidden>
+                  <p id="overlay-title"></p>
+                  <p id="overlay-detail"></p>
+                  <p id="overlay-note" class="overlay-note" hidden></p>
+                  <div id="record-entry" class="record-entry" hidden>
+                    <input id="name-input" type="text" maxlength="12" placeholder="输入你的名字" autocomplete="off" />
+                    <button id="btn-save-record" type="button" class="primary">保存成绩</button>
+                  </div>
+                  <div class="overlay-actions">
+                    <button id="btn-overlay-primary" type="button" class="primary"></button>
+                    <button id="btn-overlay-secondary" type="button"></button>
+                    <button id="btn-overlay-tertiary" type="button" hidden></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <aside class="next-box" aria-label="预览下一个方块">
+              <p class="mini-label">下一个</p>
+              <canvas id="next-panel" width="120" height="288"></canvas>
+            </aside>
+            <div class="stats-box" aria-label="实时数据">
+              <div class="stat"><span>得分</span><strong id="score" class="value-accent">0</strong></div>
+              <div class="stat"><span>最高</span><strong id="best">0</strong></div>
+              <div class="stat"><span>关卡</span><strong id="level">1</strong></div>
+              <div class="stat"><span>消行</span><strong id="lines">0</strong></div>
+            </div>
+          </div>
+          <div class="touch-controls" id="touch-controls">
+            <button type="button" id="btn-left" class="touch-btn" aria-label="左移">◀</button>
+            <button type="button" id="btn-down" class="touch-btn" aria-label="软降">⬇</button>
+            <button type="button" id="btn-right" class="touch-btn" aria-label="右移">▶</button>
+            <button type="button" id="btn-rotate" class="touch-btn" aria-label="旋转">⟳</button>
+            <button type="button" id="btn-hold" class="touch-btn" aria-label="暂存">⇄</button>
+            <button type="button" id="btn-drop" class="touch-btn" aria-label="硬降">⤓</button>
+          </div>
+          <p class="hint">
+            键盘：← → 或 A / D 移动 · ↑ / W / X 旋转 · Z 反向旋转 · ↓ / S 软降 · 空格硬降 · C / Shift 暂存 · P / Esc 暂停 · R 重开；鼠标左键点击棋盘也可旋转。<br />
+            手机：使用屏幕按钮（左移 / 软降 / 右移 / 旋转 / 暂存 / 硬降），按住可连续移动。
+          </p>
+        </div>
+
+        <!-- 排行榜 -->
+        <div id="ranking-view" class="tt-view" hidden>
+          <h2 class="view-title">🏆 排行榜</h2>
+          <p class="view-subtitle">每个起点关卡的前十名 · 成绩保存在本机浏览器</p>
+          <div class="ranking-tabs" role="tablist" aria-label="选择起点关卡">
+            <button type="button" class="ranking-tab selected" data-tab="casual" role="tab" aria-selected="true">🌱 休闲</button>
+            <button type="button" class="ranking-tab" data-tab="classic" role="tab" aria-selected="false">⚡ 经典</button>
+            <button type="button" class="ranking-tab" data-tab="expert" role="tab" aria-selected="false">🔥 高手</button>
+          </div>
+          <ol id="ranking-list" class="ranking-list"></ol>
+          <p id="ranking-empty" class="ranking-empty" hidden>暂无记录，快去挑战吧！</p>
+          <button id="btn-back-ranking" type="button" class="menu-btn back-btn">← 返回菜单</button>
+        </div>
+
+        <!-- 规则弹窗 -->
+        <div id="rules-dialog" class="modal" hidden>
+          <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+            <h3 id="rules-title">📖 规则说明</h3>
+            <ul class="rules-list">
+              <li>方块持续下落，左右移动并旋转，填满一整行即可消除得分，方块堆到顶部则游戏结束。</li>
+              <li>键盘：←/→ 或 A/D 移动（长按连续移动），↑/W/X 顺时针旋转，Z 逆时针旋转，↓/S 软降，空格硬降，C/Shift 暂存，P/Esc 暂停，R 重新开始；鼠标左键点击棋盘可旋转。</li>
+              <li>手机：使用屏幕按钮完成左移、右移、旋转、软降、硬降与暂存。</li>
+              <li>计分：一次消除 1/2/3/4 行分别得 100/300/500/800 × 当前关卡；软降每格 +1 分，硬降每格 +2 分。</li>
+              <li>每消除 10 行升 1 关，下落加速；关卡越高，得分加成越高。</li>
+              <li>暂存：把当前方块存入暂存区，下次再按 C 取出交换，每落地一个方块只能暂存一次。</li>
+              <li>排行：休闲 / 经典 / 高手三个起点关卡各自保存本机前十名，游戏结束时可录入昵称。</li>
+            </ul>
+            <button id="btn-close-rules" type="button" class="primary">知道了</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/static/tetris/tetris.js?v=0.2.0"></script>
+  </body>
+</html>
