@@ -9,7 +9,7 @@
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
-    <link rel="stylesheet" href="/static/schulte/schulte.css?v=0.1.1" />
+    <link rel="stylesheet" href="/static/schulte/schulte.css?v=0.2.0" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,26 +18,141 @@
         <h1>舒尔特方格</h1>
       </header>
       <section class="game-panel">
-        <div class="mode-actions" role="group" aria-label="选择模式">
-          <button id="mode-3" type="button">3×3 (1-9)</button>
-          <button id="mode-4" type="button">4×4 (1-16)</button>
-          <button id="mode-5" type="button" class="selected">5×5 (1-25)</button>
+
+        <!-- 主菜单 -->
+        <div id="menu-view" class="st-view">
+          <div class="menu-hero">
+            <span class="menu-icon" aria-hidden="true">🔢</span>
+            <h2>舒尔特方格</h2>
+            <p>按顺序尽快点击数字 · 训练专注力与视觉搜索</p>
+          </div>
+          <div class="menu-stats" aria-label="战绩统计">
+            <div class="stat">
+              <strong id="stat-games" class="value-accent">0</strong>
+              <span>总盘数</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best-3">--</strong>
+              <span>3×3 最佳</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best-4">--</strong>
+              <span>4×4 最佳</span>
+            </div>
+            <div class="stat">
+              <strong id="stat-best-5">--</strong>
+              <span>5×5 最佳</span>
+            </div>
+          </div>
+          <div class="menu-buttons">
+            <button id="start-3" type="button" class="primary mode-btn">
+              开始游戏 · 3×3
+              <span class="mode-sub">1-9 · 热身入门</span>
+            </button>
+            <button id="start-4" type="button" class="mode-btn">
+              开始游戏 · 4×4
+              <span class="mode-sub">1-16 · 进阶练习</span>
+            </button>
+            <button id="start-5" type="button" class="mode-btn">
+              开始游戏 · 5×5
+              <span class="mode-sub">1-25 · 经典标准</span>
+            </button>
+          </div>
+          <div class="menu-links">
+            <button id="btn-rules" type="button" class="menu-btn small">📖 规则说明</button>
+            <button id="btn-records" type="button" class="menu-btn small">🏆 成绩记录</button>
+          </div>
         </div>
-        <div class="status-bar">
-          <span class="status-item">用时 <strong id="timer">0.0s</strong></span>
-          <span class="status-item">下一个 <strong id="next-number" class="value-accent">1</strong></span>
-          <span class="status-item">错误 <strong id="mistakes">0</strong></span>
-          <span class="status-item">最佳 <strong id="best">--</strong></span>
-          <button id="restart-button" type="button">重新开始</button>
+
+        <!-- 游戏界面 -->
+        <div id="game-view" class="st-view" hidden>
+          <div class="game-toolbar">
+            <button id="btn-menu" type="button" class="menu-btn small">← 菜单</button>
+            <button id="btn-restart" type="button" class="menu-btn small">↻ 重新开始</button>
+            <button id="btn-pause" type="button" class="menu-btn small">⏸ 暂停</button>
+          </div>
+          <div class="status-bar">
+            <span class="status-item">模式 <strong id="mode-label">5×5</strong></span>
+            <span class="status-item">用时 <strong id="timer">0.0s</strong></span>
+            <span class="status-item">下一个 <strong id="next-number" class="value-accent">1</strong></span>
+            <span class="status-item">错误 <strong id="mistakes">0</strong></span>
+            <span class="status-item">最佳 <strong id="best">--</strong></span>
+          </div>
+          <div class="progress-wrap" aria-hidden="true">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <div class="grid-wrap">
+            <div id="grid" class="schulte-grid" aria-label="舒尔特方格"></div>
+            <div id="pause-overlay" class="overlay" hidden>
+              <h3 class="overlay-title">已暂停</h3>
+              <p id="pause-detail" class="overlay-detail">当前用时 0.0s</p>
+              <div class="overlay-actions">
+                <button id="btn-resume" type="button" class="primary">继续</button>
+                <button id="btn-pause-restart" type="button">重新开始</button>
+                <button id="btn-pause-menu" type="button">返回菜单</button>
+              </div>
+            </div>
+            <div id="result-overlay" class="overlay" hidden>
+              <h3 class="overlay-title">完成！</h3>
+              <p id="result-detail" class="overlay-detail"></p>
+              <p id="result-record" class="result-record" hidden>🎉 新纪录！</p>
+              <div class="overlay-actions">
+                <button id="btn-again" type="button" class="primary">再来一局</button>
+                <button id="btn-result-menu" type="button">返回菜单</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint">
+            按从小到大的顺序尽快点击所有数字。第一次点击开始计时；
+            点错数字会计入错误次数。每种模式的最佳成绩分别保存在本机。
+          </p>
         </div>
-        <div id="grid" class="schulte-grid" aria-label="舒尔特方格"></div>
-        <p id="result" class="result" hidden></p>
-        <p class="hint">
-          选择 3×3、4×4 或 5×5 模式，按从小到大的顺序尽快点击所有数字。第一次点击开始计时；
-          点错数字会计入错误次数。每种模式的最佳成绩分别保存。
-        </p>
+
+        <!-- 成绩记录 -->
+        <div id="records-view" class="st-view" hidden>
+          <h2 class="view-title">成绩记录</h2>
+          <div class="records-best" aria-label="各模式最佳成绩">
+            <div class="stat">
+              <strong id="rec-best-3">--</strong>
+              <span>3×3 最佳</span>
+            </div>
+            <div class="stat">
+              <strong id="rec-best-4">--</strong>
+              <span>4×4 最佳</span>
+            </div>
+            <div class="stat">
+              <strong id="rec-best-5">--</strong>
+              <span>5×5 最佳</span>
+            </div>
+          </div>
+          <h3 class="records-heading">最近记录</h3>
+          <ul id="history-list" class="history-list"></ul>
+          <p id="history-empty" class="history-empty" hidden>暂无记录，去玩一局吧！</p>
+          <div class="records-actions">
+            <button id="btn-clear-history" type="button" class="menu-btn small">🗑 清空记录</button>
+            <button id="btn-back-menu" type="button" class="menu-btn small back-btn">← 返回菜单</button>
+          </div>
+        </div>
+
       </section>
     </main>
-    <script src="/static/schulte/schulte.js?v=0.1.1"></script>
+
+    <!-- 规则说明弹窗 -->
+    <div id="rules-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h3>规则说明</h3>
+        <ul class="rules-list">
+          <li>方格中随机分布 1 到 N 的数字（N = 3×3、4×4、5×5 对应 9、16、25）。</li>
+          <li>从 1 开始，按从小到大顺序尽快点击所有数字。</li>
+          <li>第一次点击开始计时，点错数字会计入错误次数。</li>
+          <li>点完全部数字即完成，用时越短、错误越少，成绩越好。</li>
+          <li>每种模式的最佳成绩分别保存在本机，可在「成绩记录」中查看。</li>
+          <li>小贴士：先扫视全盘再出手，保持视线在方格中心，用余光搜索下一个数字。</li>
+        </ul>
+        <button id="btn-close-rules" type="button" class="primary">知道了</button>
+      </div>
+    </div>
+
+    <script src="/static/schulte/schulte.js?v=0.2.0"></script>
   </body>
 </html>

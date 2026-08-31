@@ -3,7 +3,7 @@
 import os
 
 APP_NAME = "sgame"
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8001
@@ -44,7 +44,7 @@ GAMES = (
     {
         "id": GAME_TETRIS,
         "title": "俄罗斯方块",
-        "description": "经典落下式拼块游戏，消除整行得分，支持键盘与触屏按钮操作。",
+        "description": "主菜单 + 三级起点 + 本地排行榜，支持暂存、预览、硬降等完整操作，消除整行挑战高分。",
     },
 )
 
