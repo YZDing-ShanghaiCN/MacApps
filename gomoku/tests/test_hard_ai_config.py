@@ -25,6 +25,14 @@ def test_default_values() -> None:
     assert config.board_size == 15
 
 
+def test_removed_corrective_fields_are_gone() -> None:
+    config = DEFAULT_HARD_AI_CONFIG
+    assert not hasattr(config, "enable_tactical_precheck")
+    assert not hasattr(config, "vct_defender_reply_cap")
+    assert not hasattr(config, "defense_candidate_cap")
+    assert not hasattr(config, "timeout_check_interval_nodes")
+
+
 def test_config_is_immutable() -> None:
     with pytest.raises(FrozenInstanceError):
         DEFAULT_HARD_AI_CONFIG.time_limit_ms = 100  # type: ignore[misc]
@@ -51,9 +59,8 @@ def test_replace_creates_adjusted_copy() -> None:
         {"vcf_max_depth": 1},
         {"vct_max_depth": 0},
         {"threat_transposition_capacity": -1},
-        {"vct_defender_reply_cap": 0},
-        {"defense_candidate_cap": -3},
         {"mcts_exploration_constant": -0.5},
+        {"mcts_node_capacity": -1},
         {"mcts_uniform_prior_epsilon": 1.5},
         {"policy_temperature": 0.0},
         {"value_scale": -1.0},

@@ -17,6 +17,11 @@ Design notes
   ``(1 - eps) * policy + eps / N_all``, i.e. the uniform epsilon mass is
   spread over *all* legal moves so far-away moves are never fully
   unreachable in prior space; only pool moves become children.
+* **Deadline authority**: the deadline and cancel event are checked before
+  every simulation and inside the policy/value loops (the provider receives
+  a ``timeout_check`` callback), so the budget is a real deadline, not an
+  aspiration. The search also stops cleanly — not as a timeout — once
+  ``mcts_node_capacity`` children have been created in this search.
 * **Always legal**: the returned move is the most-visited child (ties by
   center distance), else the highest-prior pool move, else the
   center-nearest empty cell — even with zero simulations after a cancel.
@@ -24,8 +29,10 @@ Design notes
   searching.
 * **Root reuse**: when enabled, a fresh root wraps the previous search's
   subtree (kept statistics) iff the previous search did not time out and
-  the Zobrist hash (side to move included) matches. Reuse only warms up
-  statistics; legality is re-verified on the current board every time.
+  the Zobrist hash (side to move included) matches. A clean completion via
+  the node capacity is what makes reuse reachable. Reuse only warms up
+  statistics; legality is re-verified on the current board every time and
+  reused children are re-linked to the new root.
 """
 
 from __future__ import annotations
@@ -119,6 +126,7 @@ class MCTS:
         self._reuse_hash: int | None = None
         self._reuse_subtree: _Node | None = None
         self._reuse_timed_out = False
+        self._node_count = 0
 
     # ------------------------------------------------------------------ API
 
@@ -144,6 +152,7 @@ class MCTS:
         )
         simulations = 0
         timed_out = False
+        self._node_count = 0
         if position.empty_count == position.size * position.size:
             center = position.size // 2
             return MCTSResult(
@@ -156,35 +165,41 @@ class MCTS:
                 timed_out=False,
                 value=0.5,
             )
-        root = self._make_root(position)
-        if not root.untried and not root.children:
-            return MCTSResult(
-                move=self._final_move(position, root),
-                simulations=0,
-                root_visits=0,
-                elapsed_ms=max(
-                    0.0, (self.clock() - started) * 1000.0
-                ),
-                timed_out=False,
-                value=0.5,
-            )
-        immediate = self._immediate_win(position, mover, priority_moves)
-        if immediate is not None:
-            return MCTSResult(
-                move=immediate,
-                simulations=0,
-                root_visits=0,
-                elapsed_ms=max(
-                    0.0, (self.clock() - started) * 1000.0
-                ),
-                timed_out=False,
-                value=1.0,
-                root_moves=(MCTSRootMove(immediate, 0, 1.0),),
-            )
+        timeout_check = lambda: self._check_timeout(deadline, cancel_event)
+        root = _Node(move=None, player=position.current_player)
         try:
+            root = self._make_root(position, timeout_check)
+            if not root.untried and not root.children:
+                return MCTSResult(
+                    move=self._final_move(position, root),
+                    simulations=0,
+                    root_visits=0,
+                    elapsed_ms=max(
+                        0.0, (self.clock() - started) * 1000.0
+                    ),
+                    timed_out=False,
+                    value=0.5,
+                )
+            immediate = self._immediate_win(position, mover, priority_moves)
+            if immediate is not None:
+                return MCTSResult(
+                    move=immediate,
+                    simulations=0,
+                    root_visits=0,
+                    elapsed_ms=max(
+                        0.0, (self.clock() - started) * 1000.0
+                    ),
+                    timed_out=False,
+                    value=1.0,
+                    root_moves=(MCTSRootMove(immediate, 0, 1.0),),
+                )
             while True:
-                self._check_timeout(deadline, cancel_event, simulations)
-                simulations += 1
+                self._check_timeout(deadline, cancel_event)
+                if (
+                    self.config.mcts_node_capacity > 0
+                    and self._node_count >= self.config.mcts_node_capacity
+                ):
+                    break
                 node = root
                 while not node.untried and node.children:
                     child = self._best_child(node)
@@ -198,6 +213,7 @@ class MCTS:
                     child = _Node(
                         move=move, player=node.player.opponent, parent=node
                     )
+                    self._node_count += 1
                     node.children[move] = child
                     last = position.last_move
                     if (
@@ -215,12 +231,15 @@ class MCTS:
                         child.terminal_value = 0.5
                     else:
                         child.priors, child.untried = self._expand(
-                            position, child.player, priority_moves
+                            position,
+                            child.player,
+                            priority_moves,
+                            timeout_check,
                         )
                         value = self.provider.value(
                             position,
                             child.player,
-                            timeout_check=None,
+                            timeout_check=timeout_check,
                         )
                     node = child
                 while node is not root:
@@ -231,6 +250,7 @@ class MCTS:
                     position.undo_move()
                 root.visits += 1
                 root.value_sum += value
+                simulations += 1
         except MCTSTimeout:
             timed_out = True
         move = self._final_move(position, root)
@@ -248,7 +268,11 @@ class MCTS:
 
     # ------------------------------------------------------------- plumbing
 
-    def _make_root(self, position: SearchPosition) -> _Node:
+    def _make_root(
+        self,
+        position: SearchPosition,
+        timeout_check: Callable[[], None] | None,
+    ) -> _Node:
         root = _Node(move=None, player=position.current_player)
         if (
             self.config.mcts_reuse_root
@@ -269,9 +293,11 @@ class MCTS:
                 if position.is_empty(*move)
             }
             root.untried = []
+            for child in root.children.values():
+                child.parent = root
         else:
             root.priors, root.untried = self._expand(
-                position, root.player, ()
+                position, root.player, (), timeout_check
             )
         return root
 
@@ -280,6 +306,7 @@ class MCTS:
         position: SearchPosition,
         player: Player,
         priority_moves: tuple[Move, ...],
+        timeout_check: Callable[[], None] | None,
     ) -> tuple[dict[Move, float], list[Move]]:
         pool = sorted(
             self._policy_pool(position) | {
@@ -292,7 +319,7 @@ class MCTS:
         if not pool:
             return priors, []
         policy = self.provider.policy(
-            position, player, pool, timeout_check=None
+            position, player, pool, timeout_check=timeout_check
         )
         epsilon = self.config.mcts_uniform_prior_epsilon
         uniform = epsilon / max(1, position.empty_count)
@@ -395,10 +422,7 @@ class MCTS:
         self,
         deadline: float,
         cancel_event: threading.Event | None,
-        simulations: int,
     ) -> None:
-        if simulations % self.config.timeout_check_interval_nodes != 0:
-            return
         if (cancel_event is not None and cancel_event.is_set()) or (
             self.clock() >= deadline
         ):

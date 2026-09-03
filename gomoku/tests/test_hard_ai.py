@@ -107,8 +107,7 @@ def test_vcf_forced_win_reason_and_status() -> None:
 def test_vct_forced_win_reason_and_status() -> None:
     board = make_board([(7, 5, 2), (7, 7, 2), (5, 6, 2), (6, 6, 2)])
     before = board.to_list()
-    config = replace(DEFAULT_HARD_AI_CONFIG, enable_tactical_precheck=False)
-    ai = make_ai(player=Player.WHITE, config=config)
+    ai = make_ai(player=Player.WHITE)
     move = ai.choose_move(board)
     assert move == (7, 6)
     stats = ai.last_search_stats
@@ -120,15 +119,15 @@ def test_vct_forced_win_reason_and_status() -> None:
     assert board.to_list() == before
 
 
-def test_precheck_skips_tactical_stages_on_quiet_board() -> None:
+def test_quiet_board_runs_tactical_stages_then_mcts() -> None:
     board = make_board([(0, 0, 1), (14, 14, 2), (0, 14, 1), (14, 0, 2)])
     before = board.to_list()
     ai = make_ai(config=FAST_CONFIG)
     move = ai.choose_move(board)
     stats = ai.last_search_stats
     assert stats.decision_reason == REASON_MCTS
-    assert stats.vcf_status == ""
-    assert stats.vct_status == ""
+    assert stats.vcf_status == "not_found"
+    assert stats.vct_status == "not_found"
     assert stats.defense_status == ""
     assert move in get_valid_moves(board)
     assert board.to_list() == before
@@ -229,6 +228,22 @@ def test_deadline_clock_yields_legal_timeout_fallback() -> None:
     assert board.to_list() == before
 
 
+def test_tiny_time_budget_returns_legal_fallback_without_raise() -> None:
+    config = replace(
+        DEFAULT_HARD_AI_CONFIG, time_limit_ms=1, time_safety_margin_ms=0
+    )
+    board = make_board([(0, 0, 1), (14, 14, 2)])
+    before = board.to_list()
+    ai = make_ai(config=config)
+    move = ai.choose_move(board)
+    assert move in get_valid_moves(board)
+    stats = ai.last_search_stats
+    assert stats.decision_reason in (REASON_TIMEOUT, REASON_MCTS)
+    if stats.decision_reason == REASON_TIMEOUT:
+        assert stats.timed_out
+    assert board.to_list() == before
+
+
 def test_pre_set_cancel_yields_legal_move_without_raise() -> None:
     board = make_board([(0, 0, 1), (14, 14, 2)])
     before = board.to_list()
@@ -237,7 +252,9 @@ def test_pre_set_cancel_yields_legal_move_without_raise() -> None:
     cancel.set()
     move = ai.choose_move(board, cancel_event=cancel)
     assert move in get_valid_moves(board)
-    assert ai.last_search_stats.mcts_timed_out
+    stats = ai.last_search_stats
+    assert stats.decision_reason == REASON_TIMEOUT
+    assert stats.timed_out
     assert board.to_list() == before
 
 

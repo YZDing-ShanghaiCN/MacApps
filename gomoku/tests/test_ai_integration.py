@@ -60,7 +60,10 @@ def test_vs_ai_hard_difficulty_responds_with_mcts_stats() -> None:
     assert state["move_count"] == 2
     assert state["last_move"]["player"] == int(Player.WHITE)
     assert state["ai_decision"]["reason"] == "mcts_fallback"
-    assert state["ai_search_stats"]["vcf_status"] == ""
+    # Tactical stages always run now: on this near-empty board they
+    # complete with not_found instead of being skipped by a precheck.
+    assert state["ai_search_stats"]["vcf_status"] == "not_found"
+    assert state["ai_search_stats"]["vct_status"] == "not_found"
     assert state["ai_search_stats"]["mcts_simulations"] > 0
 
 

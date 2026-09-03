@@ -9,11 +9,15 @@ when the distinction matters (HardAI keeps it for decisions and debugging).
 
 Semantics
 ---------
-* ``FOUND`` means every relevant defender reply was verified to lose.
+* ``FOUND`` means every relevant defender reply (threat blocks, counter-win
+  cells and counter-four cells) was enumerated completely and verified to
+  lose; no reply set is ever truncated.
 * ``NOT_FOUND`` means the search completed within budget and disproved a
   forcing win.
 * ``TIMEOUT`` is inconclusive: it is never treated as a disproof and never
-  yields a move (``attacker_moves`` stays empty).
+  yields a move (``attacker_moves`` stays empty). The deadline and cancel
+  event are checked at every search node and inside every candidate/reply
+  enumeration loop, so the budget is a real deadline.
 
 The search is deterministic: candidates and replies are sorted by
 ``(tactical class, center distance, row, col)`` and the transposition table
@@ -197,7 +201,8 @@ class ThreatSearch:
         Every candidate is tested: playing it must either win for ``me``
         immediately or leave the opponent without a verified forcing win.
         Candidates are the chain's proof-critical cells first, then empty
-        interference cells (Chebyshev distance <= 1 of any chain cell).
+        interference cells (Chebyshev distance <= 1 of any chain cell);
+        the candidate set is enumerated completely, never truncated.
         ``chain[0]`` is never returned blindly.
         """
         defender = Player(me)
@@ -214,15 +219,18 @@ class ThreatSearch:
             self.zobrist,
             max_candidate_radius=self.config.candidate_radius,
         )
-        candidates = self._defense_candidates(position, opponent_chain)
-        if not candidates:
-            return self._finish(
-                ThreatSearchResult(
-                    SearchStatus.NOT_FOUND, mode=MODE_DEFENSE
-                ),
-                started,
-            )
         try:
+            timeout_check = lambda: self._check_timeout(deadline, cancel_event)
+            candidates = self._defense_candidates(
+                position, opponent_chain, timeout_check
+            )
+            if not candidates:
+                return self._finish(
+                    ThreatSearchResult(
+                        SearchStatus.NOT_FOUND, mode=MODE_DEFENSE
+                    ),
+                    started,
+                )
             timed_out = False
             for move in candidates:
                 self._check_timeout(deadline, cancel_event)
@@ -300,8 +308,6 @@ class ThreatSearch:
         deadline: float,
         cancel_event: threading.Event | None,
     ) -> None:
-        if self.nodes % self.config.timeout_check_interval_nodes != 0:
-            return
         if (cancel_event is not None and cancel_event.is_set()) or (
             self.clock() >= deadline
         ):
@@ -458,6 +464,8 @@ class ThreatSearch:
         pool = sorted(position.nearby_empty_moves(self.config.candidate_radius))
         ranked: list[tuple[Move, int]] = []
         for move in pool:
+            if timeout_check is not None:
+                timeout_check()
             four_dirs = [
                 (dr, dc)
                 for dr, dc in DIRECTIONS
@@ -540,28 +548,36 @@ class ThreatSearch:
 
         Win cells first, then four cells: both usually refute immediately
         (the attacker node then sees two defender winning cells), so trying
-        them before the blocks keeps disproof cheap.
+        them before the blocks keeps disproof cheap. The reply set is
+        enumerated completely — no truncation — so a FOUND proof means every
+        relevant defender reply was actually verified.
         """
         wins: list[Move] = []
         fours: list[Move] = []
         for move in self._sort_moves(
             position, list(position.nearby_empty_moves(1))
         ):
+            if timeout_check is not None:
+                timeout_check()
             if move in blocks:
                 continue
             if position.move_wins(*move, defender):
                 wins.append(move)
             elif self._creates_four(position, move, defender, timeout_check):
                 fours.append(move)
-        cap = max(0, self.config.vct_defender_reply_cap)
-        return tuple((wins + fours)[:cap])
+        return tuple(wins + fours)
 
     def _defense_candidates(
-        self, position: SearchPosition, opponent_chain: tuple[Move, ...]
+        self,
+        position: SearchPosition,
+        opponent_chain: tuple[Move, ...],
+        timeout_check: Callable[[], None] | None,
     ) -> tuple[Move, ...]:
         seen: set[Move] = set()
         candidates: list[Move] = []
         for move in opponent_chain:
+            if timeout_check is not None:
+                timeout_check()
             if (
                 position.is_inside(*move)
                 and position.is_empty(*move)
@@ -573,6 +589,8 @@ class ThreatSearch:
         for row, col in opponent_chain:
             for dr in (-1, 0, 1):
                 for dc in (-1, 0, 1):
+                    if timeout_check is not None:
+                        timeout_check()
                     candidate = (row + dr, col + dc)
                     if (
                         position.is_inside(*candidate)
@@ -581,12 +599,7 @@ class ThreatSearch:
                     ):
                         seen.add(candidate)
                         interference.append(candidate)
-        cap = max(0, self.config.defense_candidate_cap)
-        return tuple(candidates) + tuple(
-            self._sort_moves(position, interference)[
-                : max(0, cap - len(candidates))
-            ]
-        )
+        return tuple(candidates) + tuple(self._sort_moves(position, interference))
 
     # ----------------------------------------------------------- search
 
@@ -692,6 +705,7 @@ class ThreatSearch:
             position, attacker, include_threes=(mode == MODE_VCT),
             timeout_check=timeout_check,
         ):
+            timeout_check()
             position.make_move(*move)
             try:
                 continuation = self._search_defender(
@@ -752,6 +766,7 @@ class ThreatSearch:
 
         canonical = None
         for defense in replies:
+            timeout_check()
             position.make_move(*defense)
             try:
                 last = position.last_move

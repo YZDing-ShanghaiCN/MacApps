@@ -31,9 +31,6 @@ class HardAIConfig:
     candidate_radius: int = 2
     pattern_line_cache_capacity: int = 100_000
     threat_transposition_capacity: int = 100_000
-    vct_defender_reply_cap: int = 12
-    defense_candidate_cap: int = 24
-    timeout_check_interval_nodes: int = 32
 
     mcts_exploration_constant: float = 1.5
     mcts_seed: int = 20240903
@@ -46,7 +43,6 @@ class HardAIConfig:
     policy_temperature: float = 1.0
     value_scale: float = 100_000.0
     zobrist_seed: int = 0x9E37_79B9_7F4A_7C15
-    enable_tactical_precheck: bool = True
 
     def __post_init__(self) -> None:
         if self.time_limit_ms <= 0:
@@ -75,10 +71,10 @@ class HardAIConfig:
             raise ValueError("tactical max depths must be at least 2.")
         if self.threat_transposition_capacity < 0:
             raise ValueError("threat_transposition_capacity must be >= 0.")
-        if self.vct_defender_reply_cap <= 0 or self.defense_candidate_cap <= 0:
-            raise ValueError("reply and defense caps must be positive.")
         if self.mcts_exploration_constant < 0.0:
             raise ValueError("mcts_exploration_constant must be >= 0.")
+        if self.mcts_node_capacity < 0:
+            raise ValueError("mcts_node_capacity must be >= 0.")
         if not 0.0 <= self.mcts_uniform_prior_epsilon <= 1.0:
             raise ValueError("mcts_uniform_prior_epsilon must be within [0, 1].")
         if self.policy_temperature <= 0.0 or self.value_scale <= 0.0:

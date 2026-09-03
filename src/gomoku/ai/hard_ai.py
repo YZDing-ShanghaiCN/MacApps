@@ -12,8 +12,8 @@ Decision pipeline (per ``choose_move``)
 Timeouts are inconclusive and never become moves; the whole pipeline runs
 against one hard deadline plus the safety margin and never raises: on
 deadline, cancellation or any unexpected error a legal center-nearest move
-is returned. ``enable_tactical_precheck`` skips stages 2/3/5 when neither
-side has a four or three pattern (e.g. the opening).
+is returned. All stages always run (in budget order); each stage checks
+the shared deadline and cancel event at every probe point.
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ from gomoku.ai.threat_search import (
     MODE_AUTO,
     MODE_VCF,
     MODE_VCT,
-    TACTICAL_KINDS,
     SearchStatus,
     ThreatSearch,
 )
@@ -190,10 +189,6 @@ class HardAI:
         stats: HardAISearchStats,
     ) -> tuple[Move, HardAISearchStats]:
         opponent = me.opponent
-        tactical = (
-            not self.config.enable_tactical_precheck
-            or self._has_tactical_patterns(board)
-        )
 
         # 1. Immediate self win.
         stage_started = self.clock()
@@ -207,56 +202,54 @@ class HardAI:
             return wins[0], replace(stats, decision_reason=REASON_IMMEDIATE_WIN)
 
         # 2. VCF slice.
-        if tactical:
-            vcf_ms = self._stage_budget(deadline, usable_ms,
-                                        self.config.vcf_time_fraction)
-            if vcf_ms > 0:
-                stage_started = self.clock()
-                vcf = self.threat.find_forcing_win(
-                    board,
-                    me,
-                    mode=MODE_VCF,
-                    time_budget_ms=vcf_ms,
-                    cancel_event=cancel_event,
+        vcf_ms = self._stage_budget(deadline, usable_ms,
+                                    self.config.vcf_time_fraction)
+        if vcf_ms > 0:
+            stage_started = self.clock()
+            vcf = self.threat.find_forcing_win(
+                board,
+                me,
+                mode=MODE_VCF,
+                time_budget_ms=vcf_ms,
+                cancel_event=cancel_event,
+            )
+            stats = replace(
+                stats,
+                vcf_status=vcf.status.value,
+                vcf_nodes=vcf.nodes,
+                vcf_elapsed_ms=self._elapsed_ms(stage_started),
+                vcf_proof=vcf.attacker_moves,
+            )
+            if vcf.status == SearchStatus.FOUND and vcf.first_move:
+                return vcf.first_move, replace(
+                    stats, decision_reason=REASON_VCF
                 )
-                stats = replace(
-                    stats,
-                    vcf_status=vcf.status.value,
-                    vcf_nodes=vcf.nodes,
-                    vcf_elapsed_ms=self._elapsed_ms(stage_started),
-                    vcf_proof=vcf.attacker_moves,
-                )
-                if vcf.status == SearchStatus.FOUND and vcf.first_move:
-                    return vcf.first_move, replace(
-                        stats, decision_reason=REASON_VCF
-                    )
-                self._check(deadline, cancel_event)
+            self._check(deadline, cancel_event)
 
         # 3. VCT slice.
-        if tactical:
-            vct_ms = self._stage_budget(deadline, usable_ms,
-                                        self.config.vct_time_fraction)
-            if vct_ms > 0:
-                stage_started = self.clock()
-                vct = self.threat.find_forcing_win(
-                    board,
-                    me,
-                    mode=MODE_VCT,
-                    time_budget_ms=vct_ms,
-                    cancel_event=cancel_event,
+        vct_ms = self._stage_budget(deadline, usable_ms,
+                                    self.config.vct_time_fraction)
+        if vct_ms > 0:
+            stage_started = self.clock()
+            vct = self.threat.find_forcing_win(
+                board,
+                me,
+                mode=MODE_VCT,
+                time_budget_ms=vct_ms,
+                cancel_event=cancel_event,
+            )
+            stats = replace(
+                stats,
+                vct_status=vct.status.value,
+                vct_nodes=vct.nodes,
+                vct_elapsed_ms=self._elapsed_ms(stage_started),
+                vct_proof=vct.attacker_moves,
+            )
+            if vct.status == SearchStatus.FOUND and vct.first_move:
+                return vct.first_move, replace(
+                    stats, decision_reason=REASON_VCT
                 )
-                stats = replace(
-                    stats,
-                    vct_status=vct.status.value,
-                    vct_nodes=vct.nodes,
-                    vct_elapsed_ms=self._elapsed_ms(stage_started),
-                    vct_proof=vct.attacker_moves,
-                )
-                if vct.status == SearchStatus.FOUND and vct.first_move:
-                    return vct.first_move, replace(
-                        stats, decision_reason=REASON_VCT
-                    )
-                self._check(deadline, cancel_event)
+            self._check(deadline, cancel_event)
 
         # 4. Immediate opponent win block.
         stage_started = self.clock()
@@ -272,56 +265,55 @@ class HardAI:
             )
 
         # 5. Tactical defense against a verified opponent chain.
-        if tactical:
-            remaining = max(0.0, (deadline - self.clock()) * 1000.0)
-            defense_ms = remaining * self.config.defense_time_fraction
-            if defense_ms > 0:
-                find_ms = defense_ms * (
-                    1.0 - self.config.defense_verify_budget_fraction
-                )
-                verify_ms = defense_ms - find_ms
-                stage_started = self.clock()
-                chain = self.threat.find_forcing_win(
+        remaining = max(0.0, (deadline - self.clock()) * 1000.0)
+        defense_ms = remaining * self.config.defense_time_fraction
+        if defense_ms > 0:
+            find_ms = defense_ms * (
+                1.0 - self.config.defense_verify_budget_fraction
+            )
+            verify_ms = defense_ms - find_ms
+            stage_started = self.clock()
+            chain = self.threat.find_forcing_win(
+                board,
+                opponent,
+                mode=MODE_AUTO,
+                time_budget_ms=find_ms,
+                cancel_event=cancel_event,
+            )
+            stats = replace(
+                stats, defense_chain=chain.attacker_moves
+            )
+            if chain.status == SearchStatus.FOUND and chain.attacker_moves:
+                self._check(deadline, cancel_event)
+                defense = self.threat.find_forced_defense(
                     board,
-                    opponent,
-                    mode=MODE_AUTO,
-                    time_budget_ms=find_ms,
+                    me,
+                    chain.attacker_moves,
+                    time_budget_ms=verify_ms,
                     cancel_event=cancel_event,
                 )
                 stats = replace(
-                    stats, defense_chain=chain.attacker_moves
+                    stats,
+                    defense_status=defense.status.value,
+                    defense_elapsed_ms=self._elapsed_ms(stage_started),
+                    defense_move=(
+                        defense.forced_defenses[0]
+                        if defense.forced_defenses
+                        else None
+                    ),
                 )
-                if chain.status == SearchStatus.FOUND and chain.attacker_moves:
-                    self._check(deadline, cancel_event)
-                    defense = self.threat.find_forced_defense(
-                        board,
-                        me,
-                        chain.attacker_moves,
-                        time_budget_ms=verify_ms,
-                        cancel_event=cancel_event,
+                if (
+                    defense.status == SearchStatus.FOUND
+                    and defense.forced_defenses
+                ):
+                    return defense.forced_defenses[0], replace(
+                        stats, decision_reason=REASON_TACTICAL_DEFENSE
                     )
-                    stats = replace(
-                        stats,
-                        defense_status=defense.status.value,
-                        defense_elapsed_ms=self._elapsed_ms(stage_started),
-                        defense_move=(
-                            defense.forced_defenses[0]
-                            if defense.forced_defenses
-                            else None
-                        ),
-                    )
-                    if (
-                        defense.status == SearchStatus.FOUND
-                        and defense.forced_defenses
-                    ):
-                        return defense.forced_defenses[0], replace(
-                            stats, decision_reason=REASON_TACTICAL_DEFENSE
-                        )
-                    stats = replace(
-                        stats,
-                        defense_elapsed_ms=self._elapsed_ms(stage_started),
-                    )
-                self._check(deadline, cancel_event)
+                stats = replace(
+                    stats,
+                    defense_elapsed_ms=self._elapsed_ms(stage_started),
+                )
+            self._check(deadline, cancel_event)
 
         # 6. MCTS fallback with the remaining budget.
         remaining = max(0.0, (deadline - self.clock()) * 1000.0)
@@ -354,13 +346,6 @@ class HardAI:
         raise HardAITimeout
 
     # ------------------------------------------------------------- helpers
-
-    def _has_tactical_patterns(self, board: Board) -> bool:
-        for player in (Player.BLACK, Player.WHITE):
-            for pattern in self.threat.matcher.find_patterns(board, player):
-                if pattern.kind in TACTICAL_KINDS:
-                    return True
-        return False
 
     def _stage_budget(
         self, deadline: float, usable_ms: float, fraction: float

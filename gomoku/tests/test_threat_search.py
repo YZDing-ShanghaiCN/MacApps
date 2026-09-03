@@ -19,6 +19,7 @@ from gomoku.ai.threat_search import (
     find_immediate_win,
 )
 from gomoku.ai.hard_ai_config import DEFAULT_HARD_AI_CONFIG, HardAIConfig
+from gomoku.ai.search_position import SearchPosition
 from gomoku.ai.zobrist import ZobristTable
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
@@ -316,3 +317,83 @@ def test_board_immutability_across_all_entry_points() -> None:
     find_forcing_win(board, Player.WHITE, time_budget_ms=5000)
     find_forced_defense(board, Player.BLACK, ((7, 7),))
     assert board.to_list() == before
+
+
+# --------------------------------------- uncapped reply/candidate sets
+
+def _position_for(board: Board, config: HardAIConfig) -> SearchPosition:
+    zobrist = ZobristTable(board.size, config.zobrist_seed)
+    return SearchPosition.from_board(
+        board,
+        Player.WHITE,
+        zobrist,
+        max_candidate_radius=config.candidate_radius,
+    )
+
+
+def test_counter_cells_fully_enumerated_without_cap() -> None:
+    # BLACK owns eight horizontal threes (rows 2 apart with alternating
+    # column offsets so no vertical fours form across rows); each three
+    # contributes two four-creating cells -> 16 counter-four replies. A
+    # capped enumeration (the old vct_defender_reply_cap=12) would
+    # silently drop four of them.
+    stones = [
+        (row, col, 1)
+        for row in range(0, 15, 2)
+        for col in ((2, 3, 4) if row % 4 == 0 else (8, 9, 10))
+    ]
+    board = make_board(stones)
+    search = make_search(board)
+    position = _position_for(board, DEFAULT_HARD_AI_CONFIG)
+    replies = search._counter_cells(
+        position, Player.BLACK, blocks=set(), timeout_check=None
+    )
+    expected = {
+        (row, col)
+        for row in range(0, 15, 2)
+        for col in (
+            (1, 5) if row % 4 == 0 else (7, 11)
+        )
+    }
+    assert set(replies) == expected
+    assert len(replies) == 16
+
+
+def test_defense_candidates_fully_enumerated_without_cap() -> None:
+    chain = ((7, 7), (8, 8), (9, 9), (6, 8), (8, 6))
+    board = Board()
+    search = make_search(board)
+    position = _position_for(board, DEFAULT_HARD_AI_CONFIG)
+    candidates = search._defense_candidates(position, chain, None)
+    expected = set(chain)
+    for row, col in chain:
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                cell = (row + dr, col + dc)
+                if (
+                    board.is_inside(cell[0], cell[1])
+                    and position.is_empty(*cell)
+                ):
+                    expected.add(cell)
+    assert set(candidates) == expected
+    assert candidates[: len(chain)] == chain
+    assert len(candidates) > 24  # the old defense_candidate_cap
+
+
+def test_forced_defense_deadline_during_enumeration_returns_timeout() -> None:
+    board = make_board([(7, 5, 1), (7, 6, 1), (7, 7, 1)])
+    zobrist = ZobristTable(board.size, DEFAULT_HARD_AI_CONFIG.zobrist_seed)
+    calls = iter([0.0])
+
+    def clock() -> float:
+        try:
+            return next(calls)
+        except StopIteration:
+            return 1e12
+
+    search = ThreatSearch(DEFAULT_HARD_AI_CONFIG, zobrist, clock=clock)
+    result = search.find_forced_defense(
+        board, Player.WHITE, ((7, 4), (7, 3)), time_budget_ms=5000
+    )
+    assert result.status == SearchStatus.TIMEOUT
+    assert result.forced_defenses == ()

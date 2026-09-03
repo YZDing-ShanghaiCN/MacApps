@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 import sys
 import threading
@@ -61,12 +62,30 @@ def test_prefers_immediate_win() -> None:
 
 
 def test_deterministic_across_instances() -> None:
+    class DeterministicClock:
+        def __init__(self, limit: int) -> None:
+            self.calls = 0
+            self.limit = limit
+
+        def __call__(self) -> float:
+            self.calls += 1
+            return 1e12 if self.calls > self.limit else 0.0
+
     board = make_board([(7, 7, 1), (8, 8, 2), (6, 6, 1)])
-    first = make_mcts().search(board, Player.WHITE, time_budget_ms=200)
-    second = make_mcts().search(board, Player.WHITE, time_budget_ms=200)
+
+    def run():
+        return MCTS(
+            DEFAULT_HARD_AI_CONFIG,
+            HeuristicPolicyValueProvider(DEFAULT_HARD_AI_CONFIG),
+            clock=DeterministicClock(8000),
+        ).search(board, Player.WHITE, time_budget_ms=200)
+
+    first = run()
+    second = run()
     assert first.move == second.move
     assert first.simulations == second.simulations
     assert first.root_visits == second.root_visits
+    assert first.timed_out == second.timed_out
 
 
 def test_respects_budget_and_never_exceeds() -> None:
@@ -130,3 +149,82 @@ def test_priority_moves_get_explored() -> None:
     assert result.root_visits > 0
     visited = {item.move for item in result.root_moves}
     assert (7, 8) in visited or (6, 8) in visited
+
+
+def test_node_capacity_gives_clean_exit_and_safe_reuse() -> None:
+    config = replace(DEFAULT_HARD_AI_CONFIG, mcts_node_capacity=40)
+    mcts = MCTS(
+        config,
+        HeuristicPolicyValueProvider(config),
+        clock=lambda: 0.0,
+    )
+    board = make_board([(7, 7, 1), (8, 8, 2)])
+    first = mcts.search(board, Player.WHITE, time_budget_ms=200)
+    assert first.timed_out is False
+    assert first.simulations == 40
+    assert first.move is not None
+    assert board.is_empty(*first.move)
+
+    # Same position again: the clean completion allows root reuse. Simulating
+    # through the reused subtree exercises the re-linked parent chain in the
+    # backup loop (stale parents would crash with an AttributeError).
+    second = mcts.search(board, Player.WHITE, time_budget_ms=200)
+    assert second.timed_out is False
+    assert second.simulations == 40
+    assert second.root_visits == second.simulations
+    assert second.move is not None
+    assert board.is_empty(*second.move)
+
+
+def test_deadline_checked_during_policy_expansion() -> None:
+    class CountingClock:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> float:
+            self.calls += 1
+            return 1e12 if self.calls > 5 else 0.0
+
+    mcts = MCTS(
+        DEFAULT_HARD_AI_CONFIG,
+        HeuristicPolicyValueProvider(DEFAULT_HARD_AI_CONFIG),
+        clock=CountingClock(),
+    )
+    board = make_board([(7, 7, 1), (8, 8, 2)])
+    result = mcts.search(board, Player.WHITE, time_budget_ms=200)
+    assert result.timed_out is True
+    assert result.simulations == 0
+    assert result.move is not None
+    assert board.is_empty(*result.move)
+
+
+def test_provider_receives_timeout_callback() -> None:
+    class RecordingProvider(HeuristicPolicyValueProvider):
+        def __init__(self, config) -> None:
+            super().__init__(config)
+            self.policy_callback_seen = False
+            self.value_callback_seen = False
+
+        def policy(
+            self, position, player, legal_moves, *, timeout_check=None
+        ):
+            if timeout_check is not None:
+                self.policy_callback_seen = True
+            return super().policy(
+                position, player, legal_moves, timeout_check=timeout_check
+            )
+
+        def value(self, position, player, *, timeout_check=None):
+            if timeout_check is not None:
+                self.value_callback_seen = True
+            return super().value(
+                position, player, timeout_check=timeout_check
+            )
+
+    provider = RecordingProvider(DEFAULT_HARD_AI_CONFIG)
+    mcts = MCTS(DEFAULT_HARD_AI_CONFIG, provider)
+    board = make_board([(7, 7, 1), (8, 8, 2)])
+    result = mcts.search(board, Player.WHITE, time_budget_ms=200)
+    assert result.simulations > 0
+    assert provider.policy_callback_seen
+    assert provider.value_callback_seen
