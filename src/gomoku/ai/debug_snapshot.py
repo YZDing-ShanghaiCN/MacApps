@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from gomoku import config
+from gomoku.ai.hard_ai import HardAI
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.ai.simple_ai import SimpleAI
 from gomoku.core.enums import Player
@@ -26,6 +27,7 @@ def build_debug_snapshot(
 
     normal_ai = ai if isinstance(ai, NormalAI) else None
     simple_ai = ai if isinstance(ai, SimpleAI) else None
+    hard_ai = ai if isinstance(ai, HardAI) else None
     return {
         "schema_version": 1,
         "app_version": config.APP_VERSION,
@@ -66,6 +68,14 @@ def build_debug_snapshot(
             ),
         },
         "simple_ai": simple_ai.debug_state() if simple_ai is not None else None,
+        "hard_ai": {
+            "config": asdict(hard_ai.config) if hard_ai is not None else None,
+            "search_stats": (
+                asdict(hard_ai.last_search_stats)
+                if hard_ai is not None
+                else None
+            ),
+        },
     }
 
 

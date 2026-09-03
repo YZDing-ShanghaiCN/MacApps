@@ -1,0 +1,73 @@
+# HardAI 技术说明
+
+HardAI 是“困难”难度的独立 AI：战术证明引擎（VCF/VCT/强制防守）+ 确定性蒙特卡洛树搜索（MCTS）兜底。它不是更深的 NormalAI，与 SimpleAI/NormalAI 的实现完全分离，配置集中在 `src/gomoku/ai/hard_ai_config.py`（`HardAIConfig`，不可变 dataclass，默认每步 800ms 总预算、20ms 安全余量）。
+
+## 决策流水线
+
+`HardAI.choose_move` 与 NormalAI 保持相同的同步调用约定（含 `cancel_event`），按以下顺序决策，任一阶段命中即返回：
+
+| 阶段 | 决策原因 | 时间预算（默认） | 说明 |
+|---|---|---|---|
+| 1. 己方一步获胜 | `immediate_win` | 瞬时 | 扫描一步成五的所有点，取最靠中心的 |
+| 2. VCF | `vcf_forced_win` | 可用时间 × 0.25 | 仅使用四的连续冲四证明 |
+| 3. VCT | `vct_forced_win` | 可用时间 × 0.45 | 四 + 活三/跳三的连续做杀证明 |
+| 4. 阻挡对手一步获胜 | `immediate_block` | 瞬时 | 对手成五点中最靠中心的一个 |
+| 5. 战术防守 | `tactical_defense` | 剩余时间 × 0.5 | 先找对手强制胜链，再逐点验证防守（找链与验证各占一半） |
+| 6. MCTS 兜底 | `mcts_fallback` | 全部剩余时间 | PUCT 蒙特卡洛树搜索，战术点作为优先落点 |
+
+未用完的阶段预算会滚入后续阶段。整个流水线共享一个硬时限；超时、取消或任何意外异常都返回合法的“最靠中心”兜底落点（`timeout_fallback` / `error_fallback`），**HardAI 对外绝不抛异常**。
+
+`enable_tactical_precheck=True`（默认）时，若盘面上双方都不存在四/三棋型，直接跳过阶段 2/3/5（空盘开局为 O(1) 路径）。
+
+## 战术引擎（threat_search.py）
+
+### VCF 与 VCT 的区别
+
+- **VCF**（Victory by Continuous Fours）：攻方每步都必须产生立即威胁——成五、冲四或双四。防守方只要存在任意一个被验证必胜的应对，该攻方落点即被否定；所有应对都败才宣布 FOUND，并输出结构化证明链（`attacker_moves`、一条规范防守线 `forced_defenses`、最终成五点 `winning_points`）。
+- **VCT**（Victory by Continuous Threats）：与 VCF 相同的 AND/OR 树，但攻方威胁扩展为四 + 活三/跳三。VCT 之前先跑 VCF；`mode="auto"` 先切 VCF，再对攻方步数 2..`vct_max_depth` 迭代加深。
+
+防守方应对**枚举而非假设**，分三类：
+
+1. 攻方所造四/三棋型的全部 `key_empties` 阻挡点（不设上限）；
+2. 防守方的一步成五点（硬反驳）；
+3. 防守方的反四点（在已有棋子半径 1 邻域内扫描；与 2 合计上限 `vct_defender_reply_cap`）。
+
+关键不对称：**反四不能反驳四，但能反驳三**。攻方冲四后防守方只剩阻挡点，堵住即死；而面对三的威胁，防守方可以造自己的四——攻方若应，则失去先手；若不应，防守方成五。因此 VCT 只有在防守方全盘没有反四资源时才能从三的威胁中得证。
+
+### 超时语义与置换表
+
+- `TIMEOUT` 与 `NOT_FOUND` 严格区分：TIMEOUT 表示“未能证明”，**绝不**输出落子或证据链；NOT_FOUND 才是已验证的“无强制胜”。
+- 深度感知置换表（键为 `(哈希, 攻方, 模式, 剩余深度)`，容量 `threat_transposition_capacity`）：FOUND 命中要求存储深度 ≤ 当前剩余深度（证明仍然成立）；NOT_FOUND 命中要求存储深度 ≥ 当前剩余深度（否定仍然成立）；TIMEOUT 从不入表。
+- 超时检查按 `timeout_check_interval_nodes` 个节点节流，配合硬时限与 `cancel_event`。
+
+### 强制防守（find_forced_defense）
+
+候选 = 对手强制胜链上的空点（按链序）+ 链上各点切比雪夫距离 ≤1 的干扰空点（上限 `defense_candidate_cap`）。每个候选都会落子后用 `find_forcing_win` 验证：对手仍有强制胜 → 失败；已验证无强制胜 → 采纳；验证超时 → 跳过（**绝不盲选未经验证的链首**）。返回第一个被验证安全的落点。
+
+## MCTS 兜底（mcts.py + policy_value.py）
+
+- **无 rollout 的 PUCT**：选择 = 模拟 → 扩展一个子节点 → 叶子价值来自 `PolicyValueProvider.value`（落子后成五记 1.0，无合法点记 0.5）→ 回传时逐层取反。
+- 选择公式：`Q + c_puct × P × √N_parent / (1 + N_child)`，价值 ∈ [0,1] 取行棋方视角；子节点按序迭代、严格 `>` 取优 → 完全确定。
+- 先验：候选池 = 邻域棋型关键点 ∪ 战术优先点（`priority_moves`，优先点先验 × `mcts_priority_prior_bonus`）；叠加 `mcts_uniform_prior_epsilon` 的均匀质量到**全部**合法点后归一化，保证任何落点可达。
+- 根节点复用仅在 `mcts_reuse_root` 开启、上次未超时且 Zobrist 哈希（含行棋方）一致时发生；只影响统计，绝不产生非法落子。
+- 最终落子 = 访问次数最多（并列取最靠中心）→ 先验最高 → 最靠中心合法点；即使 0 次模拟也返回合法落子。空盘约定直接返回天元。
+
+### 策略/价值提供者与模型接入点
+
+`PolicyValueProvider` 协议定义 `policy(board, player, legal_moves)` 与 `value(board, player)`。当前实现 `HeuristicPolicyValueProvider` 复用 NormalAI 的棋型静态评估作为启发式（只读借用评分表，**不含任何训练权重或 ML 依赖**）：先验 = 对候选点做增量评估后的 softmax，价值 = sigmoid(评估分 / `value_scale`)，完全确定。未来接入强化学习或神经网络模型时只需替换该实现类，战术引擎与 MCTS 无需改动。
+
+## 已知限制
+
+- 战术预检只认四/三棋型：仅有“二”的盘面（例如两个断二交叉）可能被跳过 VCF/VCT，从而错过由双三构成的强制胜；这类局面接近开局、MCTS 仍会接管。需要时可设 `enable_tactical_precheck=False`。
+- 启发式策略/价值弱于训练模型，MCTS 兜底在复杂中局主要保证合法与合理，而非最强。
+- 无禁手规则（自由规则）；搜索深度受 `vcf_max_depth`/`vct_max_depth` 限制，超深强制胜可能被判 TIMEOUT 而非 FOUND（此时转入防守/MCTS，不会乱下）。
+- 防守阶段只在对手存在“已验证强制胜链”时触发，不处理“多数小威胁”的广义防守。
+
+## 测试与诊断
+
+```bash
+python -m pytest gomoku/tests/test_threat_search.py gomoku/tests/test_mcts.py \
+  gomoku/tests/test_policy_value.py gomoku/tests/test_hard_ai.py -q
+```
+
+Web 人机页面的“AI 调试信息”在困难难度下显示 VCF/VCT/防守阶段命中状态、MCTS 模拟数与根访问数；`Export Position` / “复制问题局面”导出的 JSON 在 `hard_ai` 字段中包含完整配置与 `HardAISearchStats`，可直接作为复现资料。

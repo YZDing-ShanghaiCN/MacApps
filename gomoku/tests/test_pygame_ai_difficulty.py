@@ -9,6 +9,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from gomoku import config
 from gomoku.adapters.pygame_app import PygameGomokuApp
+from gomoku.ai.hard_ai import HardAI
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.core.enums import Player
 from gomoku.core.game import GomokuGame
@@ -38,11 +39,14 @@ def test_pygame_selects_normal_and_restart_preserves_it() -> None:
     assert app.ai_difficulty == config.AI_DIFFICULTY_NORMAL
 
 
-def test_pygame_keeps_hard_in_development() -> None:
+def test_pygame_selects_hard_and_restart_preserves_it() -> None:
     app = lightweight_app()
     app.set_difficulty(config.AI_DIFFICULTY_HARD)
-    assert app.ai_difficulty == config.AI_DIFFICULTY_SIMPLE
-    assert "coming soon" in app.message
+    assert app.ai_difficulty == config.AI_DIFFICULTY_HARD
+    assert isinstance(app.ai, HardAI)
+
+    app.reset_game()
+    assert app.ai_difficulty == config.AI_DIFFICULTY_HARD
 
 
 def test_pygame_ai_search_runs_in_background_and_stale_result_is_cancelled() -> None:
@@ -96,3 +100,17 @@ def test_pygame_exports_reproducible_debug_position(tmp_path) -> None:
     assert '"move_count": 1' in payload
     assert '"time_limit_ms": 800' in payload
     assert "Exported:" in app.message
+
+
+def test_pygame_exports_debug_position_with_hard_ai(tmp_path) -> None:
+    app = lightweight_app()
+    app.ai = HardAI(Player.WHITE)
+    app.ai_difficulty = config.AI_DIFFICULTY_HARD
+    app.game.make_move(7, 7)
+
+    path = app.export_debug_position(tmp_path)
+
+    assert path is not None and path.exists()
+    payload = path.read_text(encoding="utf-8")
+    assert '"hard_ai"' in payload
+    assert '"vcf_status"' in payload

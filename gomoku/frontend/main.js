@@ -68,8 +68,13 @@ const DECISION_LABELS = {
   immediate_win: "立即获胜",
   immediate_block: "阻挡对手立即获胜",
   vcf_forced_win: "连续冲四获胜",
+  vct_forced_win: "连续做杀获胜",
+  tactical_defense: "战术防守",
   defensive_vcf: "化解连续冲四",
   iterative_deepening: "迭代加深搜索",
+  mcts_fallback: "蒙特卡洛树搜索",
+  timeout_fallback: "超时兜底",
+  error_fallback: "异常兜底",
   legal_fallback: "合法落点兜底",
   nearby_fallback: "邻域落点兜底",
   empty_board_center: "空棋盘中心",
@@ -189,7 +194,11 @@ function updateMode(state) {
     "aria-pressed",
     String(aiMode && difficulty === "normal"),
   );
-  difficultyHardButton.disabled = true;
+  difficultyHardButton.disabled = !aiMode || busy;
+  difficultyHardButton.setAttribute(
+    "aria-pressed",
+    String(aiMode && difficulty === "hard"),
+  );
   const humanColor = state.human_color_choice || "black";
   for (const [button, color] of [
     [colorBlackButton, "black"],
@@ -375,6 +384,17 @@ function updateAiDebug(state) {
       "简单 AI：规则策略",
       `原因 ${DECISION_LABELS[decision?.reason] || decision?.reason || "尚未决策"}`,
     ].join("　");
+  } else if (stats.vcf_status !== undefined) {
+    aiDebugSummaryElement.textContent = [
+      `VCF ${stats.vcf_status === "found" ? "命中" : (stats.vcf_status === "timeout" ? "超时" : "未命中")}`,
+      `VCT ${stats.vct_status === "found" ? "命中" : (stats.vct_status === "timeout" ? "超时" : "未命中")}`,
+      `防守 ${stats.defense_status === "found" ? "命中" : (stats.defense_status === "timeout" ? "超时" : "未启用")}`,
+      `模拟 ${stats.mcts_simulations}`,
+      `根访问 ${stats.mcts_root_visits}`,
+      `耗时 ${Number(stats.elapsed_ms || 0).toFixed(1)}ms`,
+      stats.timed_out ? "达到预算" : "完整结束",
+      `原因 ${DECISION_LABELS[decision?.reason] || decision?.reason || "尚未决策"}`,
+    ].join("　");
   } else {
     aiDebugSummaryElement.textContent = [
       `深度 ${stats.completed_depth}`,
@@ -498,7 +518,8 @@ async function playMove(row, col) {
   requestInFlight = true;
   render(currentState);
   if (currentState.mode === "vs_ai") {
-    setMessage(`${currentState.ai_difficulty === "normal" ? "普通" : "简单"} AI 思考中…`);
+    const label = DIFFICULTY_LABELS[currentState.ai_difficulty] || "AI";
+    setMessage(`${label} AI 思考中…`);
   }
   try {
     const state = await requestJson("/api/move", {
@@ -627,7 +648,7 @@ async function changeDifficulty(difficulty) {
       body: JSON.stringify({ difficulty }),
     });
     render(state);
-    setMessage(`当前 AI 难度：${difficulty === "normal" ? "普通" : "简单"}`);
+    setMessage(`当前 AI 难度：${DIFFICULTY_LABELS[difficulty] || difficulty}`);
   } catch (error) {
     setMessage(friendlyErrorMessage(error.message));
   } finally {
@@ -678,6 +699,10 @@ difficultySimpleButton.addEventListener("click", () => {
 
 difficultyNormalButton.addEventListener("click", () => {
   changeDifficulty("normal");
+});
+
+difficultyHardButton.addEventListener("click", () => {
+  changeDifficulty("hard");
 });
 
 colorBlackButton.addEventListener("click", () => {

@@ -49,6 +49,21 @@ def test_vs_ai_move_count_increases_by_two_unless_game_ends() -> None:
         assert state["move_count"] >= 2
 
 
+def test_vs_ai_hard_difficulty_responds_with_mcts_stats() -> None:
+    routes.set_current_mode(config.MODE_VS_AI)
+    routes.set_current_difficulty(config.AI_DIFFICULTY_HARD)
+
+    routes.make_move({"row": 7, "col": 7})
+    state = wait_for_ai()
+
+    assert state["ai_difficulty"] == config.AI_DIFFICULTY_HARD
+    assert state["move_count"] == 2
+    assert state["last_move"]["player"] == int(Player.WHITE)
+    assert state["ai_decision"]["reason"] == "mcts_fallback"
+    assert state["ai_search_stats"]["vcf_status"] == ""
+    assert state["ai_search_stats"]["mcts_simulations"] > 0
+
+
 def test_vs_ai_undo_reverts_player_and_ai_moves() -> None:
     routes.set_current_mode(config.MODE_VS_AI)
     routes.make_move({"row": 7, "col": 7})

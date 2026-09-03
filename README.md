@@ -3,7 +3,7 @@
 个人小游戏合集仓库，包含两个可独立运行的项目：
 
 - **[sgame](./sgame)** — 五款纯前端小游戏合集：舒尔特方格、扫雷、吃豆人、2048、俄罗斯方块，浏览器点开即玩，支持 PWA 离线访问。
-- **[gomoku](./gomoku)** — 15×15 五子棋：本地双人、人机对战（两级 AI）、私人跨网对战，提供 Pygame 桌面版与 Web 版。
+- **[gomoku](./gomoku)** — 15×15 五子棋：本地双人、人机对战（三级 AI）、私人跨网对战，提供 Pygame 桌面版与 Web 版。
 
 ## 预览
 
@@ -168,10 +168,11 @@ Quick Tunnel 适合临时私人对战。若要长期固定网址，需要自己�
 
 ### AI
 
-当前提供两种 AI 难度：
+当前提供三种 AI 难度：
 
 - 「简单」使用规则型 SimpleAI：检查一步获胜与必须阻挡点（含带间隔的五连威胁），按连续四、三、二扩展己方或阻挡对方，并带中心倾向的兜底策略。参数集中在 `src/gomoku/ai/simple_ai_config.py`。
 - 「普通」使用纯搜索 NormalAI：迭代加深 Negamax、Alpha-Beta/PVS 剪枝、Zobrist 哈希置换表、增量棋型静态评估、威胁优先候选点、有限深度 VCF 检测与动态时间分配。参数集中在 `src/gomoku/ai/normal_ai_config.py`。
+- 「困难」使用战术引擎 + 蒙特卡洛树搜索的 HardAI：验证式 VCF/VCT 强制胜证明、逐点验证的战术防守与确定性 PUCT MCTS 兜底，共享硬时限、超时绝不当作落子。参数集中在 `src/gomoku/ai/hard_ai_config.py`，技术细节见 [gomoku/docs/hard_ai.md](gomoku/docs/hard_ai.md)。
 
 可运行固定局面诊断或双配置确定性对战来比较 AI 参数：
 
