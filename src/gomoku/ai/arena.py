@@ -304,7 +304,7 @@ def compare_configs(
     )
 
 
-def _wilson_interval(
+def wilson_interval(
     equivalent_wins: float,
     games: int,
     z_score: float = 1.96,
@@ -325,9 +325,13 @@ def _wilson_interval(
     return max(0.0, center - margin), min(1.0, center + margin)
 
 
-def _elo_from_score(score: float) -> float:
+def elo_from_score(score: float) -> float:
     bounded = max(0.001, min(0.999, score))
     return 400 * math.log10(bounded / (1 - bounded))
+
+
+_wilson_interval = wilson_interval
+_elo_from_score = elo_from_score
 
 
 def _arena_config(config: NormalAIConfig, node_budget: int) -> NormalAIConfig:

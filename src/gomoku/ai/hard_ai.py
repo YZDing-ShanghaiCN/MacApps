@@ -25,7 +25,10 @@ from dataclasses import dataclass, replace
 
 from gomoku.ai.hard_ai_config import DEFAULT_HARD_AI_CONFIG, HardAIConfig
 from gomoku.ai.mcts import MCTS
-from gomoku.ai.policy_value import HeuristicPolicyValueProvider
+from gomoku.ai.policy_value import (
+    HeuristicPolicyValueProvider,
+    PolicyValueProvider,
+)
 from gomoku.ai.threat_search import (
     MODE_AUTO,
     MODE_VCF,
@@ -98,6 +101,7 @@ class HardAI:
         *,
         config: HardAIConfig = DEFAULT_HARD_AI_CONFIG,
         clock: Callable[[], float] = time.monotonic,
+        provider: PolicyValueProvider | None = None,
     ) -> None:
         self.player = Player(player)
         if self.player == Player.EMPTY:
@@ -106,7 +110,14 @@ class HardAI:
         self.clock = clock
         zobrist = ZobristTable(config.board_size, config.zobrist_seed)
         self.threat = ThreatSearch(config, zobrist, clock=clock)
-        self.provider = HeuristicPolicyValueProvider(config)
+        if provider is not None:
+            self.provider = provider
+        elif config.model_path:
+            from gomoku.ai.model_provider import ModelPolicyValueProvider
+
+            self.provider = ModelPolicyValueProvider(config, config.model_path)
+        else:
+            self.provider = HeuristicPolicyValueProvider(config)
         self.mcts = MCTS(config, self.provider, clock=clock)
         self._lock = threading.Lock()
         self.last_search_stats = HardAISearchStats()

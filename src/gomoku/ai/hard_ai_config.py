@@ -44,6 +44,11 @@ class HardAIConfig:
     value_scale: float = 100_000.0
     zobrist_seed: int = 0x9E37_79B9_7F4A_7C15
 
+    # Path to a trained policy-value network (save_model output). None
+    # keeps the heuristic provider; the model provider imports torch
+    # lazily, so the core game never requires ML dependencies.
+    model_path: str | None = None
+
     def __post_init__(self) -> None:
         if self.time_limit_ms <= 0:
             raise ValueError("time_limit_ms must be positive.")
@@ -79,6 +84,8 @@ class HardAIConfig:
             raise ValueError("mcts_uniform_prior_epsilon must be within [0, 1].")
         if self.policy_temperature <= 0.0 or self.value_scale <= 0.0:
             raise ValueError("policy_temperature and value_scale must be positive.")
+        if self.model_path is not None and not self.model_path.strip():
+            raise ValueError("model_path must be a non-empty path or None.")
 
 
 DEFAULT_HARD_AI_CONFIG = HardAIConfig()

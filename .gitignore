@@ -54,3 +54,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Self-play training artifacts (models, data, run logs)
+gomoku/models/

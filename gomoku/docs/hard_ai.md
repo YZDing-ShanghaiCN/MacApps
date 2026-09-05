@@ -57,12 +57,14 @@ HardAI 是“困难”难度的独立 AI：战术证明引擎（VCF/VCT/强制�
 
 ### 策略/价值提供者与模型接入点
 
-`PolicyValueProvider` 协议定义 `policy(board, player, legal_moves)` 与 `value(board, player)`。当前实现 `HeuristicPolicyValueProvider` 复用 NormalAI 的棋型静态评估作为启发式（只读借用评分表，**不含任何训练权重或 ML 依赖**）：先验 = 对候选点做增量评估后的 softmax，价值 = sigmoid(评估分 / `value_scale`)，完全确定。未来接入强化学习或神经网络模型时只需替换该实现类，战术引擎与 MCTS 无需改动。
+`PolicyValueProvider` 协议定义 `policy(board, player, legal_moves)` 与 `value(board, player)`。默认实现 `HeuristicPolicyValueProvider` 复用 NormalAI 的棋型静态评估作为启发式（只读借用评分表，**不含任何训练权重或 ML 依赖**）：先验 = 对候选点做增量评估后的 softmax，价值 = sigmoid(评估分 / `value_scale`)，完全确定。
+
+配置 `HardAIConfig.model_path`（或直接向 `HardAI(..., provider=...)` 注入实现）即可切换为 `ModelPolicyValueProvider`：加载自博弈训练的小型策略-价值网络（`gomoku/ai/model.py`，合法点掩码 softmax + tanh 价值映射到 (0,1)），torch 惰性导入，不配置模型时核心游戏与启发式路径完全不依赖 PyTorch。自博弈数据生成、训练与“只保留更强模型”的迭代循环见 [docs/selfplay_training.md](selfplay_training.md)。
 
 ## 已知限制
 
 - 战术阶段预算固定（VCF 25% + VCT 45%），深度受 `vcf_max_depth`/`vct_max_depth` 限制：超深或超宽的强制胜可能因预算耗尽被判 TIMEOUT 而非 FOUND（此时转入防守/MCTS，不会乱下）；TIMEOUT 永远只是“未能证明”，不是“不存在”。
-- 启发式策略/价值弱于训练模型，MCTS 兜底在复杂中局主要保证合法与合理，而非最强。
+- 默认启发式策略/价值弱于训练模型，MCTS 兜底在复杂中局主要保证合法与合理，而非最强；训练模型只影响 MCTS 兜底阶段，战术阶段始终先运行。
 - 无禁手规则（自由规则）。
 - 防守阶段只在对手存在“已验证强制胜链”时触发，不处理“多数小威胁”的广义防守。
 
