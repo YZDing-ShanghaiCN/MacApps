@@ -23,6 +23,7 @@ from gomoku.ai.hard_ai import HardAI, HardAISearchStats
 from gomoku.ai.hard_ai_config import DEFAULT_HARD_AI_CONFIG, HardAIConfig
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.ai.normal_ai_config import DEFAULT_NORMAL_AI_CONFIG, NormalAIConfig
+from gomoku.ai.opening_generator import validate_opening
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
 from gomoku.core.rules import check_win
@@ -56,6 +57,9 @@ class HardGameResult:
     tactic_hits: dict[str, int]
     mcts_sims: dict[str, int]
     moves: tuple[RecordedHardMove, ...]
+    opening: Opening = ()
+    black_label: str = ""
+    white_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -71,6 +75,12 @@ class HardMatchSummary:
     timeout_rate: dict[str, float]
     recommended_label: str | None
     game_records: tuple[HardGameResult, ...]
+    opening_mode: str = "fixed"
+    opening_seed: int | None = None
+    opening_count: int = 0
+    opening_length_min: int | None = None
+    opening_length_max: int | None = None
+    openings: tuple[Opening, ...] = ()
 
 
 def load_hard_config(path: str | Path, base: HardAIConfig) -> HardAIConfig:
@@ -138,6 +148,11 @@ def play_hard_game(
     if black_label == white_label:
         raise ValueError("Arena labels must be distinct.")
     board = Board()
+    if not validate_opening(opening, board.size):
+        raise ValueError(
+            f"Invalid opening: {opening!r} is terminal, illegal or "
+            "not strictly alternating."
+        )
     recorded: list[RecordedHardMove] = []
     for expected_index, (row, col, player) in enumerate(opening):
         expected_player = Player.BLACK if expected_index % 2 == 0 else Player.WHITE
@@ -177,6 +192,9 @@ def play_hard_game(
                 tactic_hits,
                 mcts_sims,
                 tuple(recorded),
+                opening=opening,
+                black_label=black_label,
+                white_label=white_label,
             )
         current = current.opponent
 
@@ -189,6 +207,9 @@ def play_hard_game(
         tactic_hits,
         mcts_sims,
         tuple(recorded),
+        opening=opening,
+        black_label=black_label,
+        white_label=white_label,
     )
 
 
@@ -219,6 +240,10 @@ def compare_hard_configs(
     mcts_capacity: int = 2_000,
     max_moves: int = 100,
     openings: tuple[Opening, ...] = DEFAULT_ARENA_OPENINGS,
+    opening_mode: str = "fixed",
+    opening_seed: int | None = None,
+    opening_length_min: int | None = None,
+    opening_length_max: int | None = None,
 ) -> HardMatchSummary:
     """Play both color assignments for every opening and aggregate."""
 
@@ -258,6 +283,11 @@ def compare_hard_configs(
     return _summarize(
         wins, draws, games, searches, timed_outs, tactic_hits, mcts_sims,
         records,
+        openings=openings,
+        opening_mode=opening_mode,
+        opening_seed=opening_seed,
+        opening_length_min=opening_length_min,
+        opening_length_max=opening_length_max,
     )
 
 
@@ -269,6 +299,10 @@ def compare_hard_vs_normal(
     normal_node_budget: int = 2_000,
     max_moves: int = 100,
     openings: tuple[Opening, ...] = DEFAULT_ARENA_OPENINGS,
+    opening_mode: str = "fixed",
+    opening_seed: int | None = None,
+    opening_length_min: int | None = None,
+    opening_length_max: int | None = None,
 ) -> HardMatchSummary:
     """Cross-engine match: HardAI vs NormalAI, both color assignments."""
 
@@ -312,6 +346,11 @@ def compare_hard_vs_normal(
     return _summarize(
         wins, draws, games, searches, timed_outs, tactic_hits, mcts_sims,
         records,
+        openings=openings,
+        opening_mode=opening_mode,
+        opening_seed=opening_seed,
+        opening_length_min=opening_length_min,
+        opening_length_max=opening_length_max,
     )
 
 
@@ -324,6 +363,12 @@ def _summarize(
     tactic_hits: dict[str, int],
     mcts_sims: dict[str, int],
     records: list[HardGameResult],
+    *,
+    openings: tuple[Opening, ...] = (),
+    opening_mode: str = "fixed",
+    opening_seed: int | None = None,
+    opening_length_min: int | None = None,
+    opening_length_max: int | None = None,
 ) -> HardMatchSummary:
     labels = sorted(wins)
     score_rates = {
@@ -363,4 +408,10 @@ def _summarize(
         },
         recommended_label=recommended,
         game_records=tuple(records),
+        opening_mode=opening_mode,
+        opening_seed=opening_seed,
+        opening_count=len(openings),
+        opening_length_min=opening_length_min,
+        opening_length_max=opening_length_max,
+        openings=openings,
     )

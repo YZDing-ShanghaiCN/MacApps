@@ -21,6 +21,7 @@ from gomoku.ai.hard_arena import (  # noqa: E402
 )
 from gomoku.ai.hard_ai_config import DEFAULT_HARD_AI_CONFIG  # noqa: E402
 from gomoku.ai.normal_ai_config import DEFAULT_NORMAL_AI_CONFIG  # noqa: E402
+from gomoku.ai.opening_generator import generate_openings  # noqa: E402
 
 
 def main() -> None:
@@ -40,10 +41,46 @@ def main() -> None:
     parser.add_argument("--normal-node-budget", type=int, default=2_000)
     parser.add_argument("--max-moves", type=int, default=100)
     parser.add_argument(
+        "--opening-mode",
+        default="fixed",
+        choices=("fixed", "generated"),
+        help=(
+            "fixed: the --openings suite (fast smoke); "
+            "generated: reproducible diverse legal openings."
+        ),
+    )
+    parser.add_argument(
         "--openings",
         default="default",
         choices=("default", "empty"),
-        help="default: 5 fixed openings, empty: no opening stones",
+        help=(
+            "Fixed-mode opening suite: default: 5 fixed openings, "
+            "empty: no opening stones."
+        ),
+    )
+    parser.add_argument(
+        "--opening-seed",
+        type=int,
+        default=0,
+        help="RNG seed for generated openings (deterministic).",
+    )
+    parser.add_argument(
+        "--opening-count",
+        type=int,
+        default=16,
+        help="Number of generated openings (each played with both colors).",
+    )
+    parser.add_argument(
+        "--opening-length",
+        type=int,
+        default=4,
+        help="Minimum generated opening length in stones.",
+    )
+    parser.add_argument(
+        "--opening-length-max",
+        type=int,
+        default=None,
+        help="Optional maximum opening length (per-opening range).",
     )
     parser.add_argument(
         "--output",
@@ -62,7 +99,32 @@ def main() -> None:
         if args.config_b
         else DEFAULT_HARD_AI_CONFIG
     )
-    openings = ((),) if args.openings == "empty" else DEFAULT_ARENA_OPENINGS
+    if args.opening_mode == "generated":
+        openings = generate_openings(
+            seed=args.opening_seed,
+            count=args.opening_count,
+            length=args.opening_length,
+            size=DEFAULT_HARD_AI_CONFIG.board_size,
+            length_max=args.opening_length_max,
+        )
+        opening_kwargs = dict(
+            opening_mode="generated",
+            opening_seed=args.opening_seed,
+            opening_length_min=args.opening_length,
+            opening_length_max=(
+                args.opening_length_max
+                if args.opening_length_max is not None
+                else args.opening_length
+            ),
+        )
+        print(
+            f"openings=generated seed={args.opening_seed} "
+            f"count={len(openings)} length={args.opening_length}"
+            f"-{args.opening_length_max or args.opening_length}"
+        )
+    else:
+        openings = ((),) if args.openings == "empty" else DEFAULT_ARENA_OPENINGS
+        opening_kwargs = dict(opening_mode="fixed")
 
     if args.engine_a == args.engine_b == "hard":
         summary = compare_hard_configs(
@@ -71,6 +133,7 @@ def main() -> None:
             mcts_capacity=args.mcts_capacity,
             max_moves=args.max_moves,
             openings=openings,
+            **opening_kwargs,
         )
     elif args.engine_a == "hard" and args.engine_b == "normal":
         summary = compare_hard_vs_normal(
@@ -80,6 +143,7 @@ def main() -> None:
             normal_node_budget=args.normal_node_budget,
             max_moves=args.max_moves,
             openings=openings,
+            **opening_kwargs,
         )
     elif args.engine_a == "normal" and args.engine_b == "hard":
         summary = compare_hard_vs_normal(
@@ -89,6 +153,7 @@ def main() -> None:
             normal_node_budget=args.normal_node_budget,
             max_moves=args.max_moves,
             openings=openings,
+            **opening_kwargs,
         )
     else:
         raise SystemExit(

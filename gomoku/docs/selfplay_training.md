@@ -55,32 +55,63 @@ python gomoku/scripts/hard_ai_arena.py --engine-a hard --engine-b normal \
 
 ```bash
 python gomoku/scripts/generate_selfplay_data.py \
-  --games 100 --mcts-capacity 800 --output data/selfplay.jsonl.gz
+  --games 100 --mcts-capacity 800 --root-noise \
+  --output data/run_0000.jsonl.gz
 ```
 
 参数：`--temperature`、`--temperature-cutoff`、`--max-moves`、`--seed`、`--start-index`（追加续跑）。gzip 流使用 `mtime=0`，相同参数产生字节一致的文件。有了模型后加 `--model current.pt`，先验来自模型（策略提升）。
+
+**根节点 Dirichlet 噪声（仅自博弈）**：`--root-noise` 开启 AlphaZero 式探索——每局每次搜索的根先验先与 `Dirichlet(alpha)` 按 `(1−ε)·p + ε·noise` 混合再归一化，噪声取自该局的游戏随机源（`--seed` 决定）。抽签顺序固定（先噪声、后温度采样），因此相同 `--seed` 重放字节一致的棋谱，不同种子改变早期探索；`--dirichlet-epsilon`/`--dirichlet-alpha` 可调，默认取 `HardAIConfig` 值（0.25/0.03）。真实对局（HardAI 人机/竞技场/战术搜索）**从不**施加噪声，始终完全确定。
 
 ### 3. 训练小型策略-价值网络
 
 ```bash
 python gomoku/scripts/train_policy_value.py \
-  --data "data/*.jsonl.gz" --output model.pt --epochs 3
+  --data "data" --output model.pt --epochs 3 \
+  --replay-window 8 --replay-max-records 200000
 ```
 
 损失 = 策略交叉熵（对访问分布软标签）+ 价值 MSE（对 ±1/0），训练时对全部 8 种二面体对称（旋转/翻转）即时增广。每个 epoch 输出训练/验证损失与 top-1 命中率，并原子写出 `model.pt.epochN`。
 
+**回放缓冲（流式，不整库载入内存）**：`--data` 指向分片目录（或 glob）时，按文件名排序（`run_%04d.jsonl.gz`，名称序即时间序）只取最新 `--replay-window` 个分片；每个 epoch 以 `--replay-seed + epoch`（默认 `--replay-seed` = `--seed`）为种子做**流式水库采样**，最多抽 `--replay-max-records` 条（torch `IterableDataset`、`num_workers=0`，全流程确定可复现）。训练/验证按 `crc32(分片路径:行号) % 10000` 稳定切分，与采样、epoch、种子无关。开始时打印每个分片路径与记录数以及最终训练/验证规模；`--replay-window 0` / `--replay-max-records 0` 表示不丢弃、不限量。gzip JSONL 分片格式不变，追加续跑（`--start-index`）与中断重跑都安全。
+
 ### 4. 接入 HardAI
 
-`HardAIConfig.model_path` 指向模型文件时，HardAI 自动改用 `ModelPolicyValueProvider`（合法点掩码 softmax + tanh 价值映射到 (0,1)）；也可通过 `HardAI(..., provider=...)` 直接注入任意 `PolicyValueProvider` 实现。不配置时保持启发式提供者，行为与之前逐位一致。
+激活模型有三种方式，优先级从高到低：
+
+1. `HardAI(..., provider=...)` 直接注入任意 `PolicyValueProvider` 实现；
+2. `HardAIConfig.model_path` 指向模型文件；
+3. 环境变量 `GOMOKU_HARD_AI_MODEL_PATH` 指向模型文件（无需改配置即可让已部署程序用上模型）。
+
+模型路径生效时 HardAI 改用 `ModelPolicyValueProvider`（合法点掩码 softmax + tanh 价值映射到 (0,1)），并在构造时**立即校验**：路径不存在、棋盘尺寸不符、PyTorch 缺失等任何失败都会向 stderr 打一次诊断并**回退到启发式提供者**，对局完全可恢复；当前生效的提供者类型/路径/说明会出现在调试快照的 `hard_ai.provider` 字段。不配置任何模型时保持启发式提供者、完全不依赖 PyTorch，行为与之前逐位一致。
 
 ### 5. 周期性迭代：只保留更强的模型
 
 ```bash
 python gomoku/scripts/iterate_model.py \
-  --model-dir gomoku/models --selfplay-games 100 --train-epochs 3
+  --model-dir gomoku/models --selfplay-games 100 --train-epochs 3 \
+  --replay-window 8 --replay-max-records 200000 \
+  --arena-opening-mode generated --arena-opening-count 16
 ```
 
-一次运行 = 自博弈（用当前模型先验）→ 训练候选 → 竞技场（候选 vs 当前模型，首次 vs 启发式）→ 候选 95% Wilson 区间下界 > 0.5 才复制为 `current.pt`。每次运行向 `gomoku/models/runs.jsonl` 追加一行 JSON 记录；模型、数据与报告均在 `gomoku/models/`（已 gitignore）。
+一次运行 = 自博弈（用当前模型先验，纯 MCTS）→ 训练候选（默认在**最新 8 个分片**组成的回放集上训练，而不是只训最新分片）→ 竞技场（候选 vs 当前模型，首次 vs 启发式）→ 候选 95% Wilson 区间**下界** > 0.5 才复制为 `current.pt`（点胜率 > 0.5 但区间下界 ≤ 0.5 时**不**晋级，小样本噪声不会晋级）。每次运行向 `gomoku/models/runs.jsonl` 追加一行 JSON 记录，含回放文件清单、`replay_window`/`replay_max_records`、训练记录数、开局元数据与 Wilson `confidence_95`；模型、数据与报告均在 `gomoku/models/`（已 gitignore）。
+
+**晋级赛开局**：默认 `generated` 模式用固定种子生成可复现的多样合法开局（生成过程拒绝终局/非法/非交替序列，并按颜色交换签名去重），每个开局交换黑白各下一盘（默认 16 个开局 → 32 盘，长度 `--arena-opening-length`）；`--arena-opening-mode fixed` 退回快速冒烟用的固定开局套件。开局、颜色分配与完整棋谱都写入报告 JSON。
+
+## 一次认真的训练运行
+
+```bash
+python gomoku/scripts/iterate_model.py \
+  --model-dir gomoku/models \
+  --selfplay-games 100 --mcts-capacity 800 \
+  --train-epochs 3 --replay-window 8 --replay-max-records 200000 \
+  --arena-opening-mode generated --arena-opening-count 16 \
+  --arena-opening-seed 0 --arena-opening-length 4
+```
+
+- 想加强自博弈探索时，可用 `generate_selfplay_data.py --root-noise --games 100` 直接生成带噪声的分片再交给训练脚本（相同 `--seed` 仍字节可复现）。
+- 训练出的模型会自动启用全局 Top-K 候选与渐进式扩展（见 [docs/hard_ai.md](hard_ai.md)），无需额外参数。
+- 晋级判定只用 Wilson 95% 区间下界 > 0.5；每次运行追加一行 `runs.jsonl`，可随时中断、重跑或续跑。
 
 ## 注意
 

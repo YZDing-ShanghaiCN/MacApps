@@ -25,10 +25,8 @@ from dataclasses import dataclass, replace
 
 from gomoku.ai.hard_ai_config import DEFAULT_HARD_AI_CONFIG, HardAIConfig
 from gomoku.ai.mcts import MCTS
-from gomoku.ai.policy_value import (
-    HeuristicPolicyValueProvider,
-    PolicyValueProvider,
-)
+from gomoku.ai.model_activation import build_hard_ai_provider
+from gomoku.ai.policy_value import PolicyValueProvider
 from gomoku.ai.threat_search import (
     MODE_AUTO,
     MODE_VCF,
@@ -89,7 +87,13 @@ class HardAISearchStats:
     mcts_elapsed_ms: float = 0.0
     mcts_value: float = 0.5
     mcts_timed_out: bool = False
+    mcts_reuse_plies: int = 0
+    mcts_root_noise: bool = False
     root_moves: tuple[tuple[Move, int, float], ...] = ()
+
+    provider_type: str = "heuristic"
+    provider_model_path: str | None = None
+    provider_note: str = ""
 
 
 class HardAI:
@@ -110,17 +114,14 @@ class HardAI:
         self.clock = clock
         zobrist = ZobristTable(config.board_size, config.zobrist_seed)
         self.threat = ThreatSearch(config, zobrist, clock=clock)
-        if provider is not None:
-            self.provider = provider
-        elif config.model_path:
-            from gomoku.ai.model_provider import ModelPolicyValueProvider
-
-            self.provider = ModelPolicyValueProvider(config, config.model_path)
-        else:
-            self.provider = HeuristicPolicyValueProvider(config)
+        selection = build_hard_ai_provider(config, injected=provider)
+        self.provider = selection.provider
+        self.provider_type = selection.provider_type
+        self.provider_model_path = selection.model_path
+        self.provider_note = selection.note
         self.mcts = MCTS(config, self.provider, clock=clock)
         self._lock = threading.Lock()
-        self.last_search_stats = HardAISearchStats()
+        self.last_search_stats = self._new_stats()
 
     # ------------------------------------------------------------------ API
 
@@ -146,7 +147,7 @@ class HardAI:
         del last_opponent_move  # The complete board is the source of truth.
         valid_moves = get_valid_moves(board)
         if not valid_moves:
-            self.last_search_stats = HardAISearchStats()
+            self.last_search_stats = self._new_stats()
             return None
         try:
             me = self.player if player is None else Player(player)
@@ -162,7 +163,7 @@ class HardAI:
         )
         deadline = started + usable_ms / 1000.0
         fallback = min(valid_moves, key=lambda move: self._center_key(move))
-        stats = HardAISearchStats()
+        stats = self._new_stats()
         try:
             move, stats = self._decide(
                 board,
@@ -347,6 +348,8 @@ class HardAI:
             mcts_elapsed_ms=mcts.elapsed_ms,
             mcts_value=mcts.value,
             mcts_timed_out=mcts.timed_out,
+            mcts_reuse_plies=mcts.reuse_plies,
+            mcts_root_noise=mcts.root_noise_applied,
             root_moves=tuple(
                 (item.move, item.visits, item.value)
                 for item in mcts.root_moves
@@ -357,6 +360,13 @@ class HardAI:
         raise HardAITimeout
 
     # ------------------------------------------------------------- helpers
+
+    def _new_stats(self) -> HardAISearchStats:
+        return HardAISearchStats(
+            provider_type=self.provider_type,
+            provider_model_path=self.provider_model_path,
+            provider_note=self.provider_note,
+        )
 
     def _stage_budget(
         self, deadline: float, usable_ms: float, fraction: float

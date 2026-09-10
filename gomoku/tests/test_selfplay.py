@@ -127,6 +127,68 @@ def test_different_seeds_play_different_games() -> None:
     ]
 
 
+def test_root_noise_same_seed_replays_identical_game() -> None:
+    args = dict(
+        seed=21,
+        mcts_capacity=30,
+        max_moves=10,
+        root_noise=True,
+        dirichlet_epsilon=0.25,
+        dirichlet_alpha=0.03,
+    )
+    first = play_selfplay_game(_config(30), **args)
+    second = play_selfplay_game(_config(30), **args)
+
+    assert [record["move"] for record in first] == [
+        record["move"] for record in second
+    ]
+    assert len(first) >= 2
+
+
+def test_root_noise_different_seeds_alter_early_exploration() -> None:
+    games = [
+        play_selfplay_game(
+            _config(30),
+            seed=seed,
+            mcts_capacity=30,
+            max_moves=10,
+            root_noise=True,
+        )
+        for seed in (1, 2, 3)
+    ]
+    sequences = {
+        tuple(tuple(record["move"]) for record in game) for game in games
+    }
+
+    assert len(sequences) > 1
+
+
+def test_no_root_noise_keeps_games_deterministic() -> None:
+    args = dict(seed=9, mcts_capacity=30, max_moves=10, root_noise=False)
+    first = play_selfplay_game(_config(30), **args)
+    second = play_selfplay_game(_config(30), **args)
+
+    assert [record["move"] for record in first] == [
+        record["move"] for record in second
+    ]
+
+
+def test_generated_file_with_root_noise_is_byte_deterministic(tmp_path) -> None:
+    args = dict(
+        games=2,
+        mcts_capacity=20,
+        max_moves=8,
+        seed=5,
+        root_noise=True,
+    )
+    first_output = tmp_path / "noisy.jsonl.gz"
+    second_output = tmp_path / "noisy_again.jsonl.gz"
+    generate_selfplay_data(_config(20), output_path=first_output, **args)
+    generate_selfplay_data(_config(20), output_path=second_output, **args)
+
+    assert first_output.read_bytes() == second_output.read_bytes()
+
+
 def test_generated_file_is_deterministic_and_resumable(tmp_path) -> None:
     output = tmp_path / "selfplay.jsonl.gz"
     args = dict(

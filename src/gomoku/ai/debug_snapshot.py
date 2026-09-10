@@ -15,6 +15,18 @@ from gomoku.core.enums import Player
 from gomoku.core.game import GomokuGame
 
 
+def _provider_block(hard_ai) -> dict | None:
+    if hard_ai is None:
+        return None
+    arch = getattr(hard_ai.provider, "arch_info", lambda: None)()
+    return {
+        "type": getattr(hard_ai, "provider_type", ""),
+        "model_path": getattr(hard_ai, "provider_model_path", None),
+        "note": getattr(hard_ai, "provider_note", ""),
+        "arch": arch,
+    }
+
+
 def build_debug_snapshot(
     game: GomokuGame,
     *,
@@ -75,6 +87,7 @@ def build_debug_snapshot(
                 if hard_ai is not None
                 else None
             ),
+            "provider": _provider_block(hard_ai),
         },
     }
 

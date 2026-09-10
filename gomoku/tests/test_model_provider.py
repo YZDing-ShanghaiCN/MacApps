@@ -141,3 +141,65 @@ def test_hard_ai_default_stays_heuristic() -> None:
     ai = HardAI(Player.WHITE)
 
     assert type(ai.provider).__name__ == "HeuristicPolicyValueProvider"
+
+
+def test_global_top_k_returns_legal_deterministic_moves(tmp_path) -> None:
+    provider = _provider(tmp_path)
+    board = Board(15)
+    board.place(7, 7, Player.BLACK)
+    position = _position(board, Player.BLACK)
+
+    first = provider.global_top_k(position, Player.BLACK, 16)
+    second = provider.global_top_k(position, Player.BLACK, 16)
+
+    assert first == second
+    assert len(first) == 16
+    assert len(set(first)) == 16
+    for move in first:
+        assert board.is_empty(*move)
+    assert (7, 7) not in first
+
+
+def test_global_top_k_shares_forward_pass_with_policy(tmp_path) -> None:
+    provider = _provider(tmp_path)
+    provider._ensure_net()
+
+    class CountingNet:
+        def __init__(self, net) -> None:
+            self._net = net
+            self.size = net.size
+            self.calls = 0
+
+        def __call__(self, planes):
+            self.calls += 1
+            return self._net(planes)
+
+    counting = CountingNet(provider._net)
+    provider._net = counting
+    board = Board(15)
+    board.place(7, 7, Player.BLACK)
+    position = _position(board, Player.BLACK)
+    legal = get_valid_moves(board)
+
+    provider.policy(position, Player.BLACK, legal)
+    provider.global_top_k(position, Player.BLACK, 16)
+
+    assert counting.calls == 1
+
+
+def test_global_top_k_honors_zero_and_full_board(tmp_path) -> None:
+    provider = _provider(tmp_path)
+    empty_position = _position(Board(15), Player.BLACK)
+
+    assert provider.global_top_k(empty_position, Player.BLACK, 0) == ()
+    top = provider.global_top_k(empty_position, Player.BLACK, 16)
+    assert len(top) == 16
+
+    full = Board(15)
+    for row in range(full.size):
+        for col in range(full.size):
+            full.place(
+                row, col, Player.BLACK if (row + col) % 2 else Player.WHITE
+            )
+    full_position = _position(full, Player.BLACK)
+    assert provider.global_top_k(full_position, Player.BLACK, 16) == ()

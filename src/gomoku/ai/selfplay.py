@@ -107,12 +107,36 @@ def play_selfplay_game(
     temperature_cutoff: int = 12,
     max_moves: int = 120,
     provider: PolicyValueProvider | None = None,
+    root_noise: bool = False,
+    dirichlet_epsilon: float | None = None,
+    dirichlet_alpha: float | None = None,
 ) -> list[SelfPlayRecord]:
-    """Play one pure-MCTS game and return its labeled records."""
+    """Play one pure-MCTS game and return its labeled records.
+
+    With ``root_noise`` the game RNG (seeded by ``seed``) drives
+    AlphaZero-style Dirichlet noise on every search root's priors; the draw
+    order is fixed (noise before temperature sampling), so the same seed
+    replays the identical game while different seeds change early
+    exploration.
+    """
 
     rng = random.Random(seed)
     board = Board(config.board_size)
-    mcts_config = replace(config, mcts_node_capacity=mcts_capacity)
+    mcts_config = replace(
+        config,
+        mcts_node_capacity=mcts_capacity,
+        selfplay_dirichlet_enabled=root_noise,
+        selfplay_dirichlet_epsilon=(
+            config.selfplay_dirichlet_epsilon
+            if dirichlet_epsilon is None
+            else dirichlet_epsilon
+        ),
+        selfplay_dirichlet_alpha=(
+            config.selfplay_dirichlet_alpha
+            if dirichlet_alpha is None
+            else dirichlet_alpha
+        ),
+    )
     mcts = MCTS(
         mcts_config,
         provider or HeuristicPolicyValueProvider(mcts_config),
@@ -129,6 +153,8 @@ def play_selfplay_game(
             board,
             current,
             time_budget_ms=1_000_000.0,
+            root_noise=root_noise,
+            noise_rng=rng,
         )
         move = result.move
         if move is None:
@@ -181,6 +207,9 @@ def generate_selfplay_data(
     provider: PolicyValueProvider | None = None,
     start_index: int = 0,
     progress_every: int = 10,
+    root_noise: bool = False,
+    dirichlet_epsilon: float | None = None,
+    dirichlet_alpha: float | None = None,
 ) -> int:
     """Write ``games`` gzip-JSONL self-play games; returns records written.
 
@@ -201,6 +230,9 @@ def generate_selfplay_data(
                 temperature_cutoff=temperature_cutoff,
                 max_moves=max_moves,
                 provider=provider,
+                root_noise=root_noise,
+                dirichlet_epsilon=dirichlet_epsilon,
+                dirichlet_alpha=dirichlet_alpha,
             )
             payload = "".join(
                 json.dumps(record) + "\n" for record in records

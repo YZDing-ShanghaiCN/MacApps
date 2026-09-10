@@ -50,16 +50,22 @@ HardAI 是“困难”难度的独立 AI：战术证明引擎（VCF/VCT/强制�
 
 - **无 rollout 的 PUCT**：选择 = 模拟 → 扩展一个子节点 → 叶子价值来自 `PolicyValueProvider.value`（落子后成五记 1.0，无合法点记 0.5）→ 回传时逐层取反。
 - 选择公式：`Q + c_puct × P × √N_parent / (1 + N_child)`，价值 ∈ [0,1] 取行棋方视角；子节点按序迭代、严格 `>` 取优 → 完全确定。
-- 先验：候选池 = 邻域棋型关键点 ∪ 战术优先点（`priority_moves`，优先点先验 × `mcts_priority_prior_bonus`）；叠加 `mcts_uniform_prior_epsilon` 的均匀质量到**全部**合法点后归一化，保证任何落点可达。
+- 先验：候选池 = 邻域棋型关键点 ∪ 战术优先点（`priority_moves`，优先点先验 × `mcts_priority_prior_bonus`）∪ 模型全局 Top-K 点；叠加 `mcts_uniform_prior_epsilon` 的均匀质量到**全部**合法点后归一化，保证任何落点可达。
+- **渐进式扩展（progressive widening）**：节点创建时只把先验最高的 `mcts_pw_initial_children` 个候选置为可尝试，其余进入等待队列；节点访问数增长后按 `initial + int(mcts_pw_growth × √visits)` 逐批放行（选择阶段每次下行前补齐）。关闭 `mcts_pw_enabled` 恢复一次性暴露全部候选的旧行为。先验本身不变，只改变暴露节奏 → 深度窄节点比宽而浅的一访问节点更有统计意义，且完全确定。
+- **叶子战术探针（mcts_leaf_tactics_enabled）**：叶子创建时在本地候选池（邻域 ∪ 优先点）内做一次一着战术分类——己方一步成五 → 叶子价值直接记 1.0（不调用提供者）且成五点并入扩展优先点；对手一步成五 → 强制阻挡点并入优先点（价值仍由提供者给出）；己方存在一着造出 ≥2 个成五点的双四/活四 → 价值记 1.0。探针有界（无 VCT 递归），顶层 VCF/VCT/防守仍是权威阶段，这里只锐化 MCTS 叶子。
 - **真实时限**：截止时间与取消事件在每次模拟之前检查，并通过 `timeout_check` 回调传入 `policy()`/`value()`，在策略探测与价值评估循环内部逐点检查；搜索达到 `mcts_node_capacity` 节点数时干净结束（不计为超时）。
-- 根节点复用仅在 `mcts_reuse_root` 开启、上次搜索干净结束（未超时，例如因节点容量结束）且 Zobrist 哈希（含行棋方）一致时发生；复用的子节点重新挂接到新根，只影响统计，绝不产生非法落子。
+- **跨回合根节点复用（rerooting）**：上次搜索干净结束（未超时）且 Zobrist 哈希（含行棋方）与当前局面一致时整棵子树复用（`reuse_plies=1`）；不一致时尝试**跨回合重根**（`reuse_plies=2`）——比对存储棋谱与当前棋盘差异，要求自己刚下的子正是上次选定的落点、对手落子（一子或两子内）与存储子树的孩子吻合，并用 Zobrist 运算（复用哈希 ⊕ 落子键 ⊕ 行棋方键）逐位验证当前哈希，再按当前棋盘过滤非法孩子后重挂（统计保留，非法子丢弃）。任何不符（对手走了别的点、缺孩子、上次超时）整体丢弃重搜（`reuse_plies=0`），绝不沿用过期统计；结果中的 `reuse_plies`（0/1/2）即复用深度。共享同一实例交替行棋（如自博弈）每次得到一子重根，双方各持实例（如竞技场）得到两子重根。
 - 最终落子 = 访问次数最多（并列取最靠中心）→ 先验最高 → 最靠中心合法点；即使 0 次模拟也返回合法落子。空盘约定直接返回天元。
 
 ### 策略/价值提供者与模型接入点
 
 `PolicyValueProvider` 协议定义 `policy(board, player, legal_moves)` 与 `value(board, player)`。默认实现 `HeuristicPolicyValueProvider` 复用 NormalAI 的棋型静态评估作为启发式（只读借用评分表，**不含任何训练权重或 ML 依赖**）：先验 = 对候选点做增量评估后的 softmax，价值 = sigmoid(评估分 / `value_scale`)，完全确定。
 
-配置 `HardAIConfig.model_path`（或直接向 `HardAI(..., provider=...)` 注入实现）即可切换为 `ModelPolicyValueProvider`：加载自博弈训练的小型策略-价值网络（`gomoku/ai/model.py`，合法点掩码 softmax + tanh 价值映射到 (0,1)），torch 惰性导入，不配置模型时核心游戏与启发式路径完全不依赖 PyTorch。自博弈数据生成、训练与“只保留更强模型”的迭代循环见 [docs/selfplay_training.md](selfplay_training.md)。
+配置模型即可切换为 `ModelPolicyValueProvider`：加载自博弈训练的小型策略-价值网络（`gomoku/ai/model.py`，合法点掩码 softmax + tanh 价值映射到 (0,1)），torch 惰性导入，不配置模型时核心游戏与启发式路径完全不依赖 PyTorch。**激活优先级**：显式 `HardAI(..., provider=...)` 注入 > `HardAIConfig.model_path` > 环境变量 `GOMOKU_HARD_AI_MODEL_PATH` > 启发式。模型路径生效时构造阶段立即校验：路径缺失、棋盘尺寸不符、PyTorch 不可用等任何失败只向 stderr 打印一次诊断并回退启发式，对局不受影响。
+
+训练模型还提供**全局 Top-K 候选**（`mcts_global_top_k`，0 关闭）：每次前向对 225 点做合法掩码后取前 K 个全局落点并入 MCTS 候选池，同一节点的 `policy()` 与 `global_top_k()` 共享一次前向（单槽缓存，键为 `(哈希, 行棋方)`），因此不增加推理成本；`timeout_check` 在缓存命中前照常执行，时限契约不变。启发式提供者的该钩子恒定返回空集——启发式模式**不会**在每个节点静态评估全盘 225 点，开销不变。
+
+**探索只属于自博弈**：根 Dirichlet 噪声仅在自博弈生成器（`generate_selfplay_data.py --root-noise`，游戏种子驱动、同种子字节可复现）中开启；HardAI 人机对局、战术搜索与竞技场从不施加噪声，真实对局始终完全确定。自博弈数据生成、训练与“只保留更强模型”的迭代循环见 [docs/selfplay_training.md](selfplay_training.md)。
 
 ## 已知限制
 
@@ -75,4 +81,4 @@ python -m pytest gomoku/tests/test_threat_search.py gomoku/tests/test_mcts.py \
   gomoku/tests/test_policy_value.py gomoku/tests/test_hard_ai.py -q
 ```
 
-Web 人机页面的“AI 调试信息”在困难难度下显示 VCF/VCT/防守阶段命中状态、MCTS 模拟数与根访问数；`Export Position` / “复制问题局面”导出的 JSON 在 `hard_ai` 字段中包含完整配置与 `HardAISearchStats`，可直接作为复现资料。
+Web 人机页面的“AI 调试信息”在困难难度下显示 VCF/VCT/防守阶段命中状态、MCTS 模拟数与根访问数；`Export Position` / “复制问题局面”导出的 JSON 在 `hard_ai` 字段中包含完整配置与 `HardAISearchStats`（含本次搜索的根复用深度 `mcts_reuse_plies`、是否施加根噪声 `mcts_root_noise`，以及 `provider` 块：当前提供者类型、模型路径、架构尺寸与失败回退说明），可直接作为复现资料。

@@ -37,6 +37,26 @@ def main() -> None:
         type=Path,
         help="Optional trained model for priors (policy improvement loop).",
     )
+    parser.add_argument(
+        "--root-noise",
+        action="store_true",
+        help=(
+            "Apply AlphaZero-style Dirichlet noise to MCTS root priors "
+            "(self-play only; deterministic per --seed)."
+        ),
+    )
+    parser.add_argument(
+        "--dirichlet-epsilon",
+        type=float,
+        default=None,
+        help="Dirichlet noise mix weight (default: HardAIConfig value).",
+    )
+    parser.add_argument(
+        "--dirichlet-alpha",
+        type=float,
+        default=None,
+        help="Dirichlet concentration (default: HardAIConfig value).",
+    )
     args = parser.parse_args()
 
     provider = None
@@ -59,6 +79,9 @@ def main() -> None:
         max_moves=args.max_moves,
         provider=provider,
         start_index=args.start_index,
+        root_noise=args.root_noise,
+        dirichlet_epsilon=args.dirichlet_epsilon,
+        dirichlet_alpha=args.dirichlet_alpha,
     )
     print(f"records={written} output={args.output}")
 

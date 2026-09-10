@@ -39,10 +39,34 @@ class HardAIConfig:
     mcts_reuse_root: bool = True
     mcts_priority_prior_bonus: float = 4.0
     mcts_uniform_prior_epsilon: float = 0.05
+    # One-move tactical probes at MCTS leaf creation (immediate win,
+    # mandatory block, double four). Bounded and cheap; the top-level
+    # VCF/VCT engine stays authoritative.
+    mcts_leaf_tactics_enabled: bool = True
+
+    # Progressive widening: a node starts with the first
+    # mcts_pw_initial_children pool moves as untried and admits more as its
+    # visit count grows (initial + int(growth * sqrt(visits))). Disabling
+    # exposes the whole pool at once (the pre-widening behavior).
+    mcts_pw_enabled: bool = True
+    mcts_pw_initial_children: int = 24
+    mcts_pw_growth: float = 8.0
+
+    # When > 0, the model provider contributes its top-k legal moves over
+    # the full board to every expansion pool (union with the local tactical
+    # pool and priority moves). Heuristic mode ignores this cheaply.
+    mcts_global_top_k: int = 16
 
     policy_temperature: float = 1.0
     value_scale: float = 100_000.0
     zobrist_seed: int = 0x9E37_79B9_7F4A_7C15
+
+    # AlphaZero-style root Dirichlet noise. Only the self-play generator
+    # enables it (MCTS.search(..., root_noise=True) with the game RNG);
+    # HardAI game play, tactical search and the arena never apply it.
+    selfplay_dirichlet_enabled: bool = False
+    selfplay_dirichlet_epsilon: float = 0.25
+    selfplay_dirichlet_alpha: float = 0.03
 
     # Path to a trained policy-value network (save_model output). None
     # keeps the heuristic provider; the model provider imports torch
@@ -82,8 +106,20 @@ class HardAIConfig:
             raise ValueError("mcts_node_capacity must be >= 0.")
         if not 0.0 <= self.mcts_uniform_prior_epsilon <= 1.0:
             raise ValueError("mcts_uniform_prior_epsilon must be within [0, 1].")
+        if self.mcts_pw_initial_children < 1:
+            raise ValueError("mcts_pw_initial_children must be >= 1.")
+        if self.mcts_pw_growth < 0.0:
+            raise ValueError("mcts_pw_growth must be >= 0.")
+        if self.mcts_global_top_k < 0:
+            raise ValueError("mcts_global_top_k must be >= 0.")
         if self.policy_temperature <= 0.0 or self.value_scale <= 0.0:
             raise ValueError("policy_temperature and value_scale must be positive.")
+        if not 0.0 <= self.selfplay_dirichlet_epsilon <= 1.0:
+            raise ValueError(
+                "selfplay_dirichlet_epsilon must be within [0, 1]."
+            )
+        if self.selfplay_dirichlet_alpha <= 0.0:
+            raise ValueError("selfplay_dirichlet_alpha must be positive.")
         if self.model_path is not None and not self.model_path.strip():
             raise ValueError("model_path must be a non-empty path or None.")
 

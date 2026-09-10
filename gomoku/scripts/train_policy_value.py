@@ -1,8 +1,11 @@
-"""Train the small policy-value network on self-play records.
+"""Train the small policy-value network on self-play records (streaming).
 
 Loss = cross-entropy(policy logits, MCTS visit distribution)
      + MSE(tanh value, game outcome +/-1/0),
-with all 8 dihedral symmetries applied on the fly. Requires PyTorch
+with all 8 dihedral symmetries applied on the fly. Records are streamed
+from gzip JSONL shards through a deterministic bounded reservoir (see
+:mod:`gomoku.ai.replay`), so memory use is capped by ``--replay-max-records``
+instead of the total history size. Requires PyTorch
 (``gomoku/requirements-ml.txt``); checkpoints are written atomically.
 """
 
@@ -10,10 +13,8 @@ from __future__ import annotations
 
 import argparse
 import glob
-import gzip
-import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ try:
     import numpy as np
     import torch
     from torch import nn
+    from torch.utils.data import DataLoader, IterableDataset
 except ModuleNotFoundError as exc:  # pragma: no cover - environment guard
     print(
         "PyTorch is required for training. Install it with:\n"
@@ -35,33 +37,83 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment guard
     raise SystemExit(1)
 
 from gomoku.ai.model import GomokuNet, save_model, symmetry_transforms  # noqa: E402
+from gomoku.ai.replay import (  # noqa: E402
+    is_val_record,
+    reservoir_sample,
+    select_replay_files,
+)
 
 
-def load_records(patterns: list[str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return (planes (N,2,S,S), policies (N,S*S), outcomes (N,1))."""
+def resolve_data_files(patterns: list[str], *, window: int) -> list[Path]:
+    """Expand ``--data`` entries (file, glob or directory) in sorted order.
 
-    plane_list: list[np.ndarray] = []
-    policy_list: list[np.ndarray] = []
-    outcome_list: list[float] = []
+    A directory entry is treated as a shard directory and reduced to its
+    newest ``window`` ``run_*.jsonl.gz`` files via the replay selector.
+    """
+
+    files: list[Path] = []
     for pattern in patterns:
-        paths = sorted(glob.glob(pattern))
-        if not paths:
-            raise SystemExit(f"no files match {pattern!r}")
-        for path in paths:
-            with gzip.open(path, "rt", encoding="utf-8") as handle:
-                for line in handle:
-                    record = json.loads(line)
-                    plane_list.append(
-                        np.asarray(record["planes"], dtype=np.float32)
-                    )
-                    policy_list.append(
-                        np.asarray(record["policy"], dtype=np.float32)
-                    )
-                    outcome_list.append(float(record["outcome"]))
-    planes = np.stack(plane_list)
-    policies = np.stack(policy_list)
-    outcomes = np.asarray(outcome_list, dtype=np.float32)[:, None]
-    return planes, policies, outcomes
+        if Path(pattern).is_dir():
+            selected = select_replay_files(pattern, window=window)
+            if not selected:
+                raise SystemExit(f"no replay files in directory {pattern!r}")
+            files.extend(selected)
+        else:
+            matched = sorted(Path(path) for path in glob.glob(pattern))
+            if not matched:
+                raise SystemExit(f"no files match {pattern!r}")
+            files.extend(matched)
+    deduped: list[Path] = []
+    for path in files:
+        if path not in deduped:
+            deduped.append(path)
+    return deduped
+
+
+class ReplayDataset(IterableDataset):
+    """Streaming dataset over replay shards with a seeded per-epoch sample.
+
+    ``num_workers=0`` is required: the reservoir and the epoch seed make the
+    iteration order fully deterministic for a fixed ``sample_seed``.
+    """
+
+    def __init__(
+        self,
+        files: list[Path],
+        *,
+        sample_seed: int,
+        max_records: int | None,
+        val_fraction: float,
+        want_val: bool,
+    ) -> None:
+        super().__init__()
+        self.files = files
+        self.sample_seed = sample_seed
+        self.max_records = max_records
+        self.val_fraction = val_fraction
+        self.want_val = want_val
+
+    def __iter__(self):
+        import random
+
+        rng = random.Random(self.sample_seed)
+        for path, line_index, record in reservoir_sample(
+            self.files, rng, self.max_records
+        ):
+            if is_val_record(path, line_index, self.val_fraction) != (
+                self.want_val
+            ):
+                continue
+            planes = torch.from_numpy(
+                np.asarray(record["planes"], dtype=np.float32)
+            )
+            policy = torch.from_numpy(
+                np.asarray(record["policy"], dtype=np.float32)
+            )
+            outcome = torch.as_tensor(
+                [float(record["outcome"])], dtype=torch.float32
+            )
+            yield planes, policy, outcome
 
 
 def augment_batch(
@@ -89,24 +141,18 @@ def augment_batch(
     )
 
 
-def evaluate(
+def _evaluate_loader(
     net,
-    planes: torch.Tensor,
-    policies: torch.Tensor,
-    outcomes: torch.Tensor,
+    loader,
     *,
-    batch_size: int,
     ce_loss,
     mse_loss,
-) -> tuple[float, float]:
+) -> tuple[float, float, int]:
     total_loss = 0.0
     correct = 0
     count = 0
     with torch.no_grad():
-        for start in range(0, len(planes), batch_size):
-            plane_batch = planes[start : start + batch_size]
-            policy_batch = policies[start : start + batch_size]
-            outcome_batch = outcomes[start : start + batch_size]
+        for plane_batch, policy_batch, outcome_batch in loader:
             logits, value = net(plane_batch)
             loss = ce_loss(logits, policy_batch) + mse_loss(
                 value, outcome_batch
@@ -118,7 +164,148 @@ def evaluate(
                 .item()
             )
             count += len(plane_batch)
-    return total_loss / max(1, count), correct / max(1, count)
+    return total_loss / max(1, count), correct / max(1, count), count
+
+
+def _board_size(files: list[Path]) -> int:
+    import gzip
+    import json
+
+    with gzip.open(files[0], "rt", encoding="utf-8") as handle:
+        first = json.loads(handle.readline())
+    return len(np.asarray(first["planes"])[0])
+
+
+def train(
+    *,
+    data: list[str],
+    output: str | Path,
+    epochs: int = 3,
+    batch_size: int = 256,
+    lr: float = 1e-3,
+    blocks: int = 4,
+    channels: int = 64,
+    val_fraction: float = 0.05,
+    seed: int = 0,
+    replay_seed: int | None = None,
+    replay_window: int = 8,
+    replay_max_records: int | None = 200_000,
+    cuda: bool = False,
+    print_fn=print,
+) -> dict:
+    """Train ``GomokuNet`` on the streaming replay sample; returns a summary."""
+
+    files = resolve_data_files(data, window=replay_window)
+    sample_seed = seed if replay_seed is None else replay_seed
+    print_fn(f"replay_files={len(files)}")
+    for path in files:
+        print_fn(f"replay_shard={path}")
+
+    size = _board_size(files)
+    net = GomokuNet(size=size, blocks=blocks, channels=channels)
+    device = "cuda" if cuda and torch.cuda.is_available() else "cpu"
+    net.to(device)
+    perms = tuple(
+        torch.as_tensor(perm, device=device)
+        for perm in symmetry_transforms(size)
+    )
+
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    ce_loss = nn.CrossEntropyLoss()
+    mse_loss = nn.MSELoss()
+    aug_rng = np.random.default_rng(seed)
+    epoch_summaries: list[dict] = []
+
+    for epoch in range(1, epochs + 1):
+        train_loader = DataLoader(
+            ReplayDataset(
+                files,
+                sample_seed=sample_seed + epoch,
+                max_records=replay_max_records,
+                val_fraction=val_fraction,
+                want_val=False,
+            ),
+            batch_size=batch_size,
+            num_workers=0,
+        )
+        val_loader = DataLoader(
+            ReplayDataset(
+                files,
+                sample_seed=sample_seed + epoch,
+                max_records=replay_max_records,
+                val_fraction=val_fraction,
+                want_val=True,
+            ),
+            batch_size=batch_size,
+            num_workers=0,
+        )
+
+        net.train()
+        total_loss = 0.0
+        correct = 0
+        train_count = 0
+        for plane_batch, policy_batch, outcome_batch in train_loader:
+            plane_batch = plane_batch.to(device)
+            policy_batch = policy_batch.to(device)
+            outcome_batch = outcome_batch.to(device)
+            plane_batch, policy_batch = augment_batch(
+                plane_batch, policy_batch, perms, aug_rng
+            )
+            optimizer.zero_grad()
+            logits, value = net(plane_batch)
+            loss = ce_loss(logits, policy_batch) + mse_loss(
+                value, outcome_batch
+            )
+            loss.backward()
+            optimizer.step()
+            total_loss += float(loss.item()) * len(plane_batch)
+            correct += int(
+                (logits.detach().argmax(dim=1) == policy_batch.argmax(dim=1))
+                .sum()
+                .item()
+            )
+            train_count += len(plane_batch)
+        train_loss = total_loss / max(1, train_count)
+        train_acc = correct / max(1, train_count)
+        net.eval()
+        val_loss, val_acc, val_count = _evaluate_loader(
+            net, val_loader, ce_loss=ce_loss, mse_loss=mse_loss
+        )
+        summary = {
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "train_acc": train_acc,
+            "train_records": train_count,
+            "val_loss": val_loss if val_count else None,
+            "val_acc": val_acc if val_count else None,
+            "val_records": val_count,
+        }
+        epoch_summaries.append(summary)
+        if val_count:
+            print_fn(
+                f"epoch={epoch} train_loss={train_loss:.4f} "
+                f"train_acc={train_acc:.3f} val_loss={val_loss:.4f} "
+                f"val_acc={val_acc:.3f} "
+                f"train_records={train_count} val_records={val_count}",
+                flush=True,
+            )
+        else:
+            print_fn(
+                f"epoch={epoch} train_loss={train_loss:.4f} "
+                f"train_acc={train_acc:.3f} "
+                f"train_records={train_count} val_records=0",
+                flush=True,
+            )
+        save_model(net, f"{output}.epoch{epoch}")
+
+    save_model(net, output)
+    print_fn(f"saved={output}")
+    return {
+        "output": str(output),
+        "files": [str(path) for path in files],
+        "size": size,
+        "epochs": epoch_summaries,
+    }
 
 
 def main() -> None:
@@ -129,7 +316,10 @@ def main() -> None:
         "--data",
         action="append",
         required=True,
-        help="Glob pattern for gzip-JSONL self-play files (repeatable).",
+        help=(
+            "Gzip-JSONL self-play file, glob, or shard directory "
+            "(repeatable; directories are limited by --replay-window)."
+        ),
     )
     parser.add_argument("--output", type=Path, default="model.pt")
     parser.add_argument("--epochs", type=int, default=3)
@@ -139,89 +329,42 @@ def main() -> None:
     parser.add_argument("--channels", type=int, default=64)
     parser.add_argument("--val-fraction", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--replay-window",
+        type=int,
+        default=8,
+        help="Keep only the newest N shards of each --data directory.",
+    )
+    parser.add_argument(
+        "--replay-max-records",
+        type=int,
+        default=200_000,
+        help="Upper bound of the sampled training records (0 = unlimited).",
+    )
+    parser.add_argument(
+        "--replay-seed",
+        type=int,
+        default=None,
+        help="Reservoir sampling seed (default: --seed).",
+    )
     parser.add_argument("--cuda", action="store_true")
     args = parser.parse_args()
 
-    planes, policies, outcomes = load_records(args.data)
-    print(f"records={len(planes)}")
-
-    torch.manual_seed(args.seed)
-    rng = np.random.default_rng(args.seed)
-    order = rng.permutation(len(planes))
-    val_count = max(1, int(len(planes) * args.val_fraction))
-    train_order = order[val_count:]
-    val_order = order[:val_count]
-    print(f"train={len(train_order)} val={len(val_order)}")
-
-    size = planes.shape[-1]
-    net = GomokuNet(size=size, blocks=args.blocks, channels=args.channels)
-    device = "cuda" if args.cuda and torch.cuda.is_available() else "cpu"
-    net.to(device)
-    perms = tuple(
-        torch.as_tensor(perm, device=device)
-        for perm in symmetry_transforms(size)
+    train(
+        data=args.data,
+        output=args.output,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        blocks=args.blocks,
+        channels=args.channels,
+        val_fraction=args.val_fraction,
+        seed=args.seed,
+        replay_seed=args.replay_seed,
+        replay_window=args.replay_window,
+        replay_max_records=args.replay_max_records,
+        cuda=args.cuda,
     )
-
-    train_planes = torch.as_tensor(planes[train_order], device=device)
-    train_policies = torch.as_tensor(policies[train_order], device=device)
-    train_outcomes = torch.as_tensor(outcomes[train_order], device=device)
-    val_planes = torch.as_tensor(planes[val_order], device=device)
-    val_policies = torch.as_tensor(policies[val_order], device=device)
-    val_outcomes = torch.as_tensor(outcomes[val_order], device=device)
-
-    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
-    ce_loss = nn.CrossEntropyLoss()
-    mse_loss = nn.MSELoss()
-
-    for epoch in range(1, args.epochs + 1):
-        net.train()
-        epoch_order = rng.permutation(len(train_planes))
-        total_loss = 0.0
-        correct = 0
-        for start in range(0, len(epoch_order), args.batch_size):
-            indices = epoch_order[start : start + args.batch_size]
-            plane_batch = train_planes[indices]
-            policy_batch = train_policies[indices]
-            outcome_batch = train_outcomes[indices]
-            plane_batch, policy_batch = augment_batch(
-                plane_batch, policy_batch, perms, rng
-            )
-            optimizer.zero_grad()
-            logits, value = net(plane_batch)
-            loss = ce_loss(logits, policy_batch) + mse_loss(
-                value, outcome_batch
-            )
-            loss.backward()
-            optimizer.step()
-            total_loss += float(loss.item()) * len(indices)
-            correct += int(
-                (logits.detach().argmax(dim=1) == policy_batch.argmax(dim=1))
-                .sum()
-                .item()
-            )
-        count = len(train_planes)
-        train_loss = total_loss / max(1, count)
-        train_acc = correct / max(1, count)
-        net.eval()
-        val_loss, val_acc = evaluate(
-            net,
-            val_planes,
-            val_policies,
-            val_outcomes,
-            batch_size=args.batch_size,
-            ce_loss=ce_loss,
-            mse_loss=mse_loss,
-        )
-        print(
-            f"epoch={epoch} train_loss={train_loss:.4f} "
-            f"train_acc={train_acc:.3f} val_loss={val_loss:.4f} "
-            f"val_acc={val_acc:.3f}",
-            flush=True,
-        )
-        save_model(net, f"{args.output}.epoch{epoch}")
-
-    save_model(net, args.output)
-    print(f"saved={args.output}")
 
 
 if __name__ == "__main__":

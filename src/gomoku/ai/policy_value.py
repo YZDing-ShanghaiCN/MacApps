@@ -140,3 +140,20 @@ class HeuristicPolicyValueProvider:
             return 0.5
         score = self._incremental_state(position).evaluate(Player(player))
         return _sigmoid(score / self.config.value_scale)
+
+    def global_top_k(
+        self,
+        position: SearchPosition,
+        player: Player | int,
+        k: int,
+        *,
+        timeout_check: Callable[[], None] | None = None,
+    ) -> tuple[Move, ...]:
+        """Heuristic mode contributes no whole-board candidates.
+
+        Constant time on purpose: statically evaluating all 225 cells per
+        node would dwarf the search budget; the local tactical pool already
+        covers the moves worth considering.
+        """
+
+        return ()

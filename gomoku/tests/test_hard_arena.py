@@ -114,3 +114,28 @@ def test_load_hard_config_rejects_unknown_fields(tmp_path) -> None:
         assert "not_a_hard_field" in str(exc)
     else:
         raise AssertionError("Unknown fields must be rejected.")
+
+
+def test_arena_is_noise_free_and_fully_deterministic() -> None:
+    config = replace(
+        DEFAULT_HARD_AI_CONFIG,
+        mcts_node_capacity=40,
+    )
+
+    def run():
+        return compare_hard_configs(
+            config,
+            replace(config, mcts_exploration_constant=1.6),
+            mcts_capacity=40,
+            max_moves=6,
+            openings=((),),
+        )
+
+    first = run()
+    second = run()
+
+    assert first.game_records == second.game_records
+    assert first.wins == second.wins
+    for record in first.game_records:
+        for move in record.moves:
+            assert move.label in ("A", "B")
