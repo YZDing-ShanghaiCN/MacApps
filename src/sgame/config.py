@@ -3,7 +3,7 @@
 import os
 
 APP_NAME = "sgame"
-APP_VERSION = "0.1.5"
+APP_VERSION = "0.1.6"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8001
@@ -19,6 +19,7 @@ GAME_MINESWEEPER = "minesweeper"
 GAME_PACMAN = "pacman"
 GAME_2048 = "2048"
 GAME_TETRIS = "tetris"
+GAME_24POINT = "24point"
 
 GAMES = (
     {
@@ -45,6 +46,11 @@ GAMES = (
         "id": GAME_TETRIS,
         "title": "俄罗斯方块",
         "description": "主菜单 + 三级起点 + 本地排行榜，支持暂存、预览、硬降等完整操作，消除整行挑战高分。",
+    },
+    {
+        "id": GAME_24POINT,
+        "title": "24点",
+        "description": "用 +、−、×、÷ 和括号把 4 个数字凑成 24，简单（1–13）与困难（1–99）双模式，每道题保证有解。",
     },
 )
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "sgame-shell-v0.1.7";
+const CACHE_NAME = "sgame-shell-v0.1.8";
 const APP_SHELL = [
   "/",
   "/static/style.css?v=0.1.1",
@@ -20,6 +20,9 @@ const APP_SHELL = [
   "/tetris",
   "/static/tetris/tetris.css?v=0.2.0",
   "/static/tetris/tetris.js?v=0.2.0",
+  "/24point",
+  "/static/24point/24point.css?v=0.1.0",
+  "/static/24point/24point.js?v=0.1.0",
 ];
 
 self.addEventListener("install", (event) => {

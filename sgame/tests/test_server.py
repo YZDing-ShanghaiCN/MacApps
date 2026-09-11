@@ -32,6 +32,7 @@ def test_portal_page_contains_game_links() -> None:
     assert 'href="/pacman"' in text
     assert 'href="/2048"' in text
     assert 'href="/tetris"' in text
+    assert 'href="/24point"' in text
 
 
 def test_schulte_page_served() -> None:
@@ -73,6 +74,14 @@ def test_tetris_page_served() -> None:
     assert response.status_code == 200
     assert "俄罗斯方块" in response.text
     assert '<canvas id="game"' in response.text
+
+
+def test_24point_page_served() -> None:
+    response = client.get("/24point")
+
+    assert response.status_code == 200
+    assert "24点" in response.text
+    assert '<div id="game-view"' in response.text
 
 
 def test_trailing_slash_redirects() -> None:
@@ -119,6 +128,13 @@ def test_static_2048_js_served() -> None:
 
 def test_static_tetris_js_served() -> None:
     response = client.get("/static/tetris/tetris.js")
+
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+
+
+def test_static_24point_js_served() -> None:
+    response = client.get("/static/24point/24point.js")
 
     assert response.status_code == 200
     assert "javascript" in response.headers["content-type"]
