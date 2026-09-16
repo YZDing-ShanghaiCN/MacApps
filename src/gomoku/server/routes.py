@@ -13,6 +13,7 @@ from gomoku import config
 from gomoku.adapters.web_adapter import serialize_game_state
 from gomoku.ai.debug_snapshot import build_debug_snapshot
 from gomoku.ai.factory import create_ai
+from gomoku.ai.hard_ai import HardAI
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.ai.simple_ai import SimpleAI
 from gomoku.core.board import Board
@@ -115,7 +116,7 @@ def state_response(session: LocalGameSession | None = None) -> dict:
         human_player=active_human_player(session),
         human_color_choice=session.human_color_choice,
     )
-    if isinstance(session.ai, NormalAI):
+    if isinstance(session.ai, (NormalAI, HardAI)):
         state["ai_search_stats"] = asdict(session.ai.last_search_stats)
     else:
         state["ai_search_stats"] = None
@@ -128,6 +129,16 @@ def state_response(session: LocalGameSession | None = None) -> dict:
             "selected_move": stats.selected_move,
             "candidates": [
                 {"move": item.move, "score": item.score}
+                for item in stats.root_moves[:3]
+            ],
+        }
+    elif isinstance(session.ai, HardAI):
+        stats = session.ai.last_search_stats
+        state["ai_decision"] = {
+            "reason": stats.decision_reason,
+            "selected_move": stats.selected_move,
+            "candidates": [
+                {"move": item[0], "score": item[1]}
                 for item in stats.root_moves[:3]
             ],
         }
@@ -306,7 +317,7 @@ def _run_ai_worker(
     cancel_event: threading.Event,
 ) -> None:
     try:
-        if isinstance(selected_ai, NormalAI):
+        if isinstance(selected_ai, (NormalAI, HardAI)):
             ai_move = selected_ai.choose_move(
                 snapshot,
                 last_opponent_move=last_opponent_move,

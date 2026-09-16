@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>24点 · sgame</title>
+    <meta name="theme-color" content="#101322" />
+    <meta name="description" content="用 +、−、×、÷ 和括号把 4 个数字凑成 24，支持简单（1–13）与困难（1–99）模式。" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css?v=0.1.1" />
+    <link rel="stylesheet" href="/static/24point/24point.css?v=0.1.0" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="game-header">
+        <a class="back-link" href="/">← 返回首页</a>
+        <h1>24点</h1>
+      </header>
+      <section class="game-panel">
+
+        <!-- 主菜单 -->
+        <div id="menu-view" class="st-view">
+          <div class="menu-hero">
+            <span class="menu-icon" aria-hidden="true">🧮</span>
+            <h2>24点</h2>
+            <p>用 +、−、×、÷ 和括号把 4 个数字凑成 24</p>
+          </div>
+          <div class="menu-buttons">
+            <button id="start-easy" type="button" class="primary mode-btn">
+              开始游戏 · 简单模式
+              <span class="mode-sub">1–13 · 经典纸牌</span>
+            </button>
+            <button id="start-hard" type="button" class="mode-btn">
+              开始游戏 · 困难模式
+              <span class="mode-sub">1–99 · 挑战进阶</span>
+            </button>
+          </div>
+          <p class="hint">
+            规则：用给出的 4 个数字各一次，通过 +、−、×、÷ 和括号组成算式，使结果等于 24。
+            中间结果可以是分数，例如 8÷(3−8÷3)=24。每道题都保证有解。
+          </p>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game-view" class="st-view" hidden>
+          <div class="game-toolbar">
+            <button id="btn-back-menu" type="button" class="menu-btn small">← 菜单</button>
+            <button id="btn-new-deal" type="button" class="menu-btn small">↻ 换一题</button>
+          </div>
+          <div class="status-bar">
+            <span class="status-item">模式 <strong id="mode-label" class="value-accent">--</strong></span>
+          </div>
+          <div class="numbers-row" aria-label="给定的 4 个数字">
+            <div class="number-card"></div>
+            <div class="number-card"></div>
+            <div class="number-card"></div>
+            <div class="number-card"></div>
+          </div>
+          <div class="expr-row">
+            <input id="expr-input" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="写出算式，如 (8-3)*(8-3)" aria-label="算式输入" />
+            <button id="btn-verify" type="button" class="primary">验证</button>
+          </div>
+          <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+          <p class="hint">
+            4 个数字每个恰好用一次，只允许 +、−、×、÷ 和括号（键盘输入 * / 即可）。
+            中间结果可以是分数，最终结果等于 24 即算成功。
+          </p>
+        </div>
+
+      </section>
+    </main>
+    <script src="/static/24point/24point.js?v=0.1.0"></script>
+  </body>
+</html>

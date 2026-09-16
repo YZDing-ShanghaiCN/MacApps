@@ -1,0 +1,5 @@
+# Optional ML dependency for HardAI's trained policy-value network.
+# The game itself never imports torch (lazy import in gomoku.ai.model).
+# CPU wheel install:
+#   python3 -m pip install --user -r requirements-ml.txt
+torch

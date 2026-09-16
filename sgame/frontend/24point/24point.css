@@ -1,0 +1,150 @@
+/* Views */
+
+.st-view[hidden] {
+  display: none;
+}
+
+/* Main menu */
+
+.menu-hero {
+  text-align: center;
+  padding: 14px 0 4px;
+}
+
+.menu-icon {
+  display: inline-block;
+  font-size: 3.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 6px 14px rgba(255, 204, 0, 0.35));
+}
+
+.menu-hero h2 {
+  margin: 10px 0 0;
+  font-size: 1.8rem;
+  letter-spacing: 0.12em;
+}
+
+.menu-hero p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 340px;
+  margin: 20px auto 0;
+}
+
+.menu-btn {
+  padding: 13px 16px;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+}
+
+.menu-btn.small {
+  padding: 7px 14px;
+  font-size: 0.9rem;
+}
+
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 14px 16px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.mode-sub {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+button.primary .mode-sub {
+  color: rgba(29, 26, 5, 0.7);
+}
+
+/* Game view */
+
+.game-toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.numbers-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 430px;
+  margin: 0 auto 16px;
+}
+
+.number-card {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(43, 51, 88, 0.35);
+  font-size: clamp(1.6rem, 8vw, 2.4rem);
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.expr-row {
+  display: flex;
+  gap: 10px;
+  max-width: 430px;
+  margin: 0 auto;
+}
+
+#expr-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  font-size: 1rem;
+  color: var(--text);
+  background: #2b3358;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+#expr-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.feedback {
+  max-width: 430px;
+  margin: 12px auto 0;
+  min-height: 1.4em;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.feedback.ok {
+  color: var(--good);
+}
+
+.feedback.error {
+  color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  .menu-icon {
+    font-size: 2.6rem;
+  }
+}

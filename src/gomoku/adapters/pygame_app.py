@@ -9,6 +9,7 @@ import pygame
 from gomoku import config
 from gomoku.ai.factory import create_ai
 from gomoku.ai.debug_snapshot import build_debug_snapshot, write_debug_snapshot
+from gomoku.ai.hard_ai import HardAI
 from gomoku.ai.normal_ai import NormalAI
 from gomoku.core.board import Board
 from gomoku.core.enums import Player
@@ -94,7 +95,7 @@ class PygameGomokuApp:
 
     def set_difficulty(self, difficulty: str) -> None:
         if difficulty not in config.AVAILABLE_AI_DIFFICULTIES:
-            self.message = "Hard AI is coming soon"
+            self.message = "Unknown AI difficulty"
             return
 
         self.ai_difficulty = difficulty
@@ -174,7 +175,7 @@ class PygameGomokuApp:
 
         def worker() -> None:
             try:
-                if isinstance(selected_ai, NormalAI):
+                if isinstance(selected_ai, (NormalAI, HardAI)):
                     move = selected_ai.choose_move(
                         snapshot,
                         last_opponent_move=last_opponent_move,
@@ -374,7 +375,12 @@ class PygameGomokuApp:
             selected=ai_mode and self.ai_difficulty == config.AI_DIFFICULTY_NORMAL,
             disabled=not ai_mode,
         )
-        self.draw_button(buttons["difficulty_hard"], "Hard (Soon)", disabled=True)
+        self.draw_button(
+            buttons["difficulty_hard"],
+            "Hard",
+            selected=ai_mode and self.ai_difficulty == config.AI_DIFFICULTY_HARD,
+            disabled=not ai_mode,
+        )
         self.draw_button(
             buttons["start"],
             "Started" if self.game.timer_running else "Start Game",

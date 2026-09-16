@@ -267,13 +267,17 @@ def test_difficulty_endpoint_selects_normal_and_reset_preserves_it() -> None:
     assert reset_response["body"]["ai_difficulty"] == config.AI_DIFFICULTY_NORMAL
 
 
-def test_hard_difficulty_remains_unavailable() -> None:
+def test_difficulty_endpoint_selects_hard_and_reset_preserves_it() -> None:
     response = request(
         "POST",
         "/api/difficulty",
         {"difficulty": config.AI_DIFFICULTY_HARD},
     )
-    assert response["status"] == 400
+    assert response["status"] == 200
+    assert response["body"]["ai_difficulty"] == config.AI_DIFFICULTY_HARD
+
+    reset_response = request("POST", "/api/reset")
+    assert reset_response["body"]["ai_difficulty"] == config.AI_DIFFICULTY_HARD
 
 
 def test_human_can_select_white_and_ai_opens_as_black_after_start() -> None:
