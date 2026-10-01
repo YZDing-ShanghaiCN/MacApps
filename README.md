@@ -248,3 +248,5 @@ MacApps/
 ## 环境说明
 
 两个项目各自使用独立的 conda 环境（`sgame` 与 `gomoku`），依赖互不冲突。sgame 服务默认监听 `127.0.0.1:8001`，gomoku 服务默认监听 `127.0.0.1:8000`，可通过 `SGAME_HOST` / `SGAME_PORT` 与 `GOMOKU_HOST` / `GOMOKU_PORT` 环境变量调整。
+
+2026-10-01 14:59 test git
